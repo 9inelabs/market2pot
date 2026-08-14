@@ -1,0 +1,92 @@
+import { Platform, TextStyle } from 'react-native';
+
+// --- iOS font bundling status ----------------------------------------------
+// Android header (Archivo Expanded, static instances) and Android body
+// (Inter, via @expo-google-fonts/inter) are fully bundled and loaded.
+//
+// iOS has NO font files in assets/fonts/ — no SFProDisplay-ExpandedSemibold.otf
+// and no SFProText-Regular/Medium/Semibold.otf. Per the build spec these must
+// be downloaded from Apple's developer site; they are not present, so iOS
+// temporarily falls back to the OS system font instead of failing silently.
+//
+// TODO(ios-fonts): once the .otf files are added to assets/fonts/ and
+// registered in the font-loading hook (src/theme/useAppFonts.ts), flip this
+// to true — the fallback families below will stop being used.
+const IOS_FONTS_BUNDLED = false;
+
+if (__DEV__ && Platform.OS === 'ios' && !IOS_FONTS_BUNDLED) {
+  console.warn(
+    '[typography] SF Pro Expanded/Text .otf files are missing from assets/fonts/. ' +
+      'iOS is temporarily using the system font — headers will not match the intended ' +
+      'design metrics until the licensed files are supplied. See build spec section 3.'
+  );
+}
+
+type BodyWeight = 'regular' | 'medium' | 'semibold';
+
+const headerFamily: string | undefined = IOS_FONTS_BUNDLED
+  ? Platform.select({ ios: 'SFProDisplay-ExpandedSemibold', android: 'ArchivoExpanded-SemiBold' })
+  : Platform.select({ ios: undefined, android: 'ArchivoExpanded-SemiBold' });
+
+const bodyFamilies: Record<BodyWeight, string | undefined> = IOS_FONTS_BUNDLED
+  ? Platform.select({
+      ios: {
+        regular: 'SFProText-Regular',
+        medium: 'SFProText-Medium',
+        semibold: 'SFProText-Semibold',
+      },
+      android: {
+        regular: 'Inter_400Regular',
+        medium: 'Inter_500Medium',
+        semibold: 'Inter_600SemiBold',
+      },
+    })!
+  : Platform.select({
+      ios: { regular: undefined, medium: undefined, semibold: undefined },
+      android: {
+        regular: 'Inter_400Regular',
+        medium: 'Inter_500Medium',
+        semibold: 'Inter_600SemiBold',
+      },
+    })!;
+
+// The iOS system-font fallback has no custom family to encode weight in, so it
+// needs an explicit numeric fontWeight. Android's custom TTFs must NOT also
+// get a fontWeight — RN/Android can silently substitute the system font when a
+// custom font family is combined with a weight it doesn't declare.
+const iosFallbackWeight: Record<BodyWeight, TextStyle['fontWeight']> = {
+  regular: '400',
+  medium: '500',
+  semibold: '600',
+};
+
+function header(): TextStyle {
+  return { fontFamily: headerFamily };
+}
+
+function body(weight: BodyWeight): TextStyle {
+  const family = bodyFamilies[weight];
+  if (Platform.OS === 'ios' && !IOS_FONTS_BUNDLED) {
+    return { fontFamily: family, fontWeight: iosFallbackWeight[weight] };
+  }
+  return { fontFamily: family };
+}
+
+export const typography = {
+  h1: { ...header(), fontSize: 32 },
+  h2: { ...header(), fontSize: 28 },
+  body: { ...body('regular'), fontSize: 16 },
+  label: { ...body('medium'), fontSize: 14 },
+  button: { ...body('semibold'), fontSize: 17 },
+  caption: { ...body('regular'), fontSize: 13 },
+} as const satisfies Record<string, TextStyle>;
+
+// Raw family names — used by the font-loading hook to know what it must load,
+// and by components (e.g. the brand wordmark) that need a family name directly
+// rather than a full text style.
+export const fontFamilies = {
+  header: headerFamily,
+  bodyRegular: bodyFamilies.regular,
+  bodyMedium: bodyFamilies.medium,
+  bodySemibold: bodyFamilies.semibold,
+} as const;
