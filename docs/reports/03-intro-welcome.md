@@ -126,6 +126,100 @@ theme/motion primitives and the phase 2 auth store.
   still has no SF Pro font files, and the `bank_accounts` INSERT-time self-verification gap
   (phase 2, fix #2) is unresolved.
 
+## Post-review fixes
+
+Six changes requested after reviewing the running Welcome screen.
+
+### What changed, by file
+
+- `src/components/marketing/HeroPlaceholder.tsx` → renamed to
+  `src/components/marketing/HeroIllustration.tsx`. The project owner supplied
+  `assets/design/hero-illustration.png` (494×716, transparent background); the component now
+  renders it via `Image` with `resizeMode="contain"` instead of the placeholder text. The
+  "swap point" language in the original report is resolved — this is the real asset now, not
+  a stand-in.
+- `src/components/brand/GoogleIcon.tsx` — new. A hand-built multi-color SVG "G" (via
+  `react-native-svg`, already a dependency) since no official Google asset was supplied. See
+  "Deviations" below — this is a best-effort reproduction from memory, not a verified asset.
+- `src/components/ui/SocialButton.tsx` — now renders `GoogleIcon` for the Google button and
+  `@expo/vector-icons`'s `FontAwesome5` "apple" glyph (monochrome — there's no colored
+  variant in Apple's own brand guidelines) for the Apple button. The `disabled` prop and its
+  40%-opacity styling were removed entirely: both buttons now always render at full opacity.
+  Tapping still shows the "Coming soon" toast when the corresponding feature flag is off —
+  that gating now lives entirely in `welcome.tsx`'s `onPress`, not in the button's own
+  appearance.
+- `src/config/features.ts` — `ENABLE_GUEST_BROWSE` flipped from `false` to `true`. Per the
+  project owner: guests can browse without an account; sign-in is only required at order
+  time. `ENABLE_GOOGLE_AUTH`/`ENABLE_APPLE_AUTH` remain `false` — only their *visual* dimming
+  was removed, not the underlying flags, since actual OAuth isn't implemented.
+- `app/browse.tsx` — new, temporary. Marketplace/browse screens are explicitly out of scope
+  for this auth/onboarding build (spec section 0), so there's nowhere real for "Browse
+  products" to go yet. Raised to the project owner, who chose a real (if bare) placeholder
+  route over a silent no-op, so the button is genuinely functional today. Clearly marked
+  TEMPORARY; nothing else references it, so it's a clean swap when marketplace scope begins.
+- `src/components/marketing/LeafWatermark.tsx` — new. Absolutely positioned, non-interactive
+  (`pointerEvents="none"`) `LeafMark` behind all Welcome screen content at 7% opacity, sized
+  to `windowWidth * 1.4` so it bleeds off the edges. Not from the original spec — a direct
+  request. Scoped to Welcome only (not Intro, which already features the leaf mark
+  prominently as primary content).
+- `app/(onboarding)/welcome.tsx` — wired in `HeroIllustration`, `LeafWatermark`, and the new
+  `GoogleIcon`-bearing `SocialButton`; `Browse products` now calls `router.push('/browse')`
+  when enabled; hero→text-block gap reduced to a literal `5` (was `spacing[16]`, i.e. 16);
+  Browse→Get Started gap reduced to a literal `5` (was part of a uniform `spacing[16]` gap
+  across all three button-stack children). Both `5`s are outside the 8pt spacing scale —
+  used as given rather than rounded to the nearest token, since they were specified as exact
+  values.
+
+### Deviations from the spec and why
+
+- **`GoogleIcon` is a best-effort reproduction, not a verified asset.** No official Google
+  brand asset was supplied. The SVG path data is reproduced from memory of the
+  widely-distributed multi-color "G" mark used across countless "Sign in with Google"
+  buttons — I'm reasonably confident in it given how common that exact icon is, but I can't
+  visually verify my own output. Please check it renders correctly and looks right; swap for
+  an official asset if it's off.
+- **Apple's icon stays monochrome.** The request said "the google icons should be the
+  colored icons," naming Google specifically. Apple's own brand guidelines for "Sign in with
+  Apple" specify a black or white silhouette only — there's no colored variant to use even if
+  the request had included it.
+- **Literal `5` used instead of a spacing-scale token.** The 8pt scale (`spacing.ts`) doesn't
+  contain `5`; used the exact value given rather than rounding to `4` or `8`.
+
+### Bugs found and fixed
+
+- **`StyleSheet.absoluteFillObject` doesn't exist in this React Native version** (caught by
+  `tsc`, not at runtime). The installed RN version types only export `StyleSheet.absoluteFill`
+  — already the plain style object (`{position: 'absolute', left: 0, right: 0, top: 0,
+  bottom: 0}`), not a registered style ID as in older RN versions. `LeafWatermark` was
+  written against the older API from memory; fixed to spread `StyleSheet.absoluteFill`
+  instead.
+
+### Verification: exact commands run and results
+
+- `npx tsc --noEmit` → one error initially (`absoluteFillObject` above), clean after the fix.
+- `npx expo-doctor` → `20/21 checks passed` — same pre-existing, already-deferred
+  patch-version finding as before, nothing new.
+- `npx expo export -p android --output-dir <tmp>` → succeeded, 1853 modules, 37 assets.
+  `assets/design/hero-illustration.png` (421KB) now appears in the asset list, confirming the
+  real image is bundled and resolves correctly through Metro (not just `tsc`). The
+  `FontAwesome5` subpath import (established in an earlier fix this session) kept the icon
+  font footprint to the same 3 files as before — confirmed by re-inspecting the asset list
+  rather than assuming the earlier fix still held. Test export directory deleted afterward.
+
+### Open questions or decisions that had to be guessed
+
+- Whether `GoogleIcon`'s reproduced path data is visually correct — needs a look at the
+  actual rendered button, not just confirmation that it compiles and bundles.
+- Whether `app/browse.tsx`'s placement (top-level route, not in any of the spec's route
+  groups) is where a future real marketplace entry point should live, or whether it'll move
+  when that scope begins.
+- Everything listed as open in the original phase 3 report is now narrower: the hero
+  illustration blocker is resolved (real asset in place). Still open: logo SVGs are still
+  Photoshop rasters, iOS still has no SF Pro font files, the `bank_accounts` INSERT-time
+  self-verification gap (phase 2, fix #2) is unresolved, and the Sign In pill's chevron is
+  still a plain `»` character (not touched by this round of fixes, even though
+  `@expo/vector-icons` is now a real dependency — could be revisited for consistency).
+
 ## What's next
 
 Phase 4: Phone entry and OTP verification screens (`(auth)/phone.tsx`, `(auth)/verify.tsx`),

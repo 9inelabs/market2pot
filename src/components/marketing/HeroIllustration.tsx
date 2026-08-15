@@ -1,16 +1,13 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 
-import { colors, spacing } from '@/theme/tokens';
-import { typography } from '@/theme/typography';
+const source = require('../../../assets/design/hero-illustration.png');
 
-// TEMPORARY: no hero illustration asset exists in assets/ yet — see the
-// phase 3 report. This is the swap point: replace this component's body
-// with the real illustration (Image or SVG) once exported; the welcome
-// screen just gives it a sized container and doesn't need to change.
-export function HeroPlaceholder() {
+// 494x716 source (~0.69 aspect), transparent background — contain, not
+// cover, since it's a character illustration, not a scene to crop into.
+export function HeroIllustration() {
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Hero illustration</Text>
+      <Image source={source} style={styles.image} resizeMode="contain" />
     </View>
   );
 }
@@ -20,11 +17,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.skeleton,
-    borderRadius: spacing[24],
   },
-  label: {
-    ...typography.caption,
-    color: colors.textMuted,
+  image: {
+    width: '100%',
+    height: '100%',
   },
 });

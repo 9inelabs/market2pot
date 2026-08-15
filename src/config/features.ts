@@ -1,13 +1,19 @@
 // Feature flags — single switch point for functionality that's built but not
 // yet ready to expose (build spec sections 3, 4.2, 7.2).
 
-// Google/Apple sign-in and guest browsing render exactly as designed on the
-// welcome screen, but are gated off until the providers are wired up. When
-// disabled, render at 40% opacity with a "Coming soon" toast — do not delete
+// Google/Apple sign-in render exactly as designed on the welcome screen, but
+// are gated off until the providers are wired up — tapping shows a "Coming
+// soon" toast rather than being visually dimmed (product decision: they
+// should look fully active even before the backend exists). Do not delete
 // the buttons themselves.
 export const ENABLE_GOOGLE_AUTH = false;
 export const ENABLE_APPLE_AUTH = false;
-export const ENABLE_GUEST_BROWSE = false;
+
+// Guests can browse without an account; sign-in is only prompted at order
+// time (not built yet — marketplace/checkout screens are out of scope for
+// this auth/onboarding build, see build spec section 0). Routes to a
+// temporary placeholder screen until the real marketplace exists.
+export const ENABLE_GUEST_BROWSE = true;
 
 // Twilio isn't provisioned yet. When active, the OTP verify screen skips the
 // network call and accepts "000000", with a visible DEV MODE banner so it can

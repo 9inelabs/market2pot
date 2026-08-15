@@ -6,7 +6,8 @@ import { LeafMark } from '@/components/brand/LeafMark';
 import { Wordmark } from '@/components/brand/Wordmark';
 import { ComingSoonToast } from '@/components/feedback/ComingSoonToast';
 import { useComingSoonToast } from '@/components/feedback/useComingSoonToast';
-import { HeroPlaceholder } from '@/components/marketing/HeroPlaceholder';
+import { HeroIllustration } from '@/components/marketing/HeroIllustration';
+import { LeafWatermark } from '@/components/marketing/LeafWatermark';
 import { Button } from '@/components/ui/Button';
 import { SignInPill } from '@/components/ui/SignInPill';
 import { SocialButton } from '@/components/ui/SocialButton';
@@ -25,6 +26,8 @@ export default function WelcomeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <LeafWatermark />
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.topBar}>
           <View style={styles.brandRow}>
@@ -41,33 +44,36 @@ export default function WelcomeScreen() {
             heights don't resolve inside a ScrollView's content container,
             which is itself sized by its content. */}
         <View style={[styles.heroWrap, { height: Math.max(windowHeight * 0.4, 240) }]}>
-          <HeroPlaceholder />
+          <HeroIllustration />
         </View>
 
-        <Text style={[typography.h1, styles.title]}>{strings.welcomeHeadline}</Text>
-        <Text style={[typography.body, styles.subtitle]}>{strings.welcomeSubtitle}</Text>
+        <View style={styles.textBlock}>
+          <Text style={[typography.h1, styles.title]}>{strings.welcomeHeadline}</Text>
+          <Text style={[typography.body, styles.subtitle]}>{strings.welcomeSubtitle}</Text>
+        </View>
 
         <View style={styles.buttonStack}>
           <Button
             label={strings.welcomeBrowseProducts}
             variant="secondary"
-            disabled={!ENABLE_GUEST_BROWSE}
-            onPress={() => (ENABLE_GUEST_BROWSE ? undefined : showComingSoon())}
+            style={styles.browseButton}
+            onPress={() => (ENABLE_GUEST_BROWSE ? router.push('/browse') : showComingSoon())}
           />
           <Button
             label={strings.welcomeGetStarted}
             variant="primary"
+            style={styles.getStartedButton}
             onPress={() => goToPhone('signup')}
           />
           <View style={styles.socialRow}>
             <SocialButton
+              provider="google"
               label={strings.welcomeContinueWithGoogle}
-              disabled={!ENABLE_GOOGLE_AUTH}
               onPress={() => (ENABLE_GOOGLE_AUTH ? undefined : showComingSoon())}
             />
             <SocialButton
+              provider="apple"
               label={strings.welcomeSignInWithApple}
-              disabled={!ENABLE_APPLE_AUTH}
               onPress={() => (ENABLE_APPLE_AUTH ? undefined : showComingSoon())}
             />
           </View>
@@ -90,13 +96,13 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: geometry.screenPaddingButtons,
     paddingBottom: spacing[40],
-    gap: spacing[24],
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: spacing[16],
+    marginBottom: spacing[24],
   },
   brandRow: {
     flexDirection: 'row',
@@ -105,6 +111,11 @@ const styles = StyleSheet.create({
   },
   heroWrap: {
     // height set inline per-render from useWindowDimensions — see above.
+    marginBottom: 5,
+  },
+  textBlock: {
+    gap: spacing[8],
+    marginBottom: spacing[32],
   },
   title: {
     color: colors.textPrimary,
@@ -115,7 +126,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   buttonStack: {
-    gap: spacing[16],
+    marginBottom: spacing[24],
+  },
+  browseButton: {
+    marginBottom: 5,
+  },
+  getStartedButton: {
+    marginBottom: spacing[16],
   },
   socialRow: {
     flexDirection: 'row',
