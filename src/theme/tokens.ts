@@ -61,3 +61,14 @@ export const geometry = {
     radius: 19.5,
   },
 } as const;
+
+// Converts a "#rrggbb" color token into an rgba() string at the given alpha.
+// For translucent fills (e.g. secondaryButton's ~15% tint) — needed because
+// View's own `opacity` style cascades to children/text, which is not what
+// "fill X @ N% opacity" means in the design doc.
+export function withOpacity(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
