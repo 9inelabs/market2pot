@@ -11,7 +11,7 @@ import { typography } from '@/theme/typography';
 export default function BrowseScreen() {
   return (
     <View style={styles.container}>
-      <Text style={typography.h2}>Browsing — coming soon</Text>
+      <Text style={typography.stepHeadline}>Browsing — coming soon</Text>
       <Text style={[typography.body, styles.subtitle]}>
         The marketplace isn't built yet. You'll be prompted to sign in only when you're ready
         to place an order.

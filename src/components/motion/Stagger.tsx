@@ -1,14 +1,17 @@
 import { Children, isValidElement, type ReactNode } from 'react';
-import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
+import Animated, { Easing, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
 type Props = {
   children: ReactNode;
   initialDelay?: number;
   step?: number;
-  distance?: number;
 };
 
-export function Stagger({ children, initialDelay = 0, step = 70, distance = 16 }: Props) {
+// Staggered entrance: each direct child fades and slides up into place in
+// sequence. Timing-based with a plain ease-out curve, not a spring — no
+// overshoot/bounce, just a clean deceleration into place (the same shape
+// most native platform transitions use).
+export function Stagger({ children, initialDelay = 0, step = 70 }: Props) {
   const reduced = useReducedMotion();
 
   return (
@@ -21,7 +24,9 @@ export function Stagger({ children, initialDelay = 0, step = 70, distance = 16 }
             entering={
               reduced
                 ? undefined
-                : FadeInDown.delay(initialDelay + i * step).duration(380).springify().damping(18)
+                : FadeInDown.delay(initialDelay + i * step)
+                    .duration(350)
+                    .easing(Easing.out(Easing.cubic))
             }
           >
             {child}

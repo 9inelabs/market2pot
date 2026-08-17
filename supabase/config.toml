@@ -412,3 +412,44 @@ enabled = true
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+[functions.list-banks]
+enabled = true
+# Public, user-independent maintenance operation (refreshes a public bank
+# list) — auth: 'none' in the function itself. Deliberately not tied to any
+# caller identity, so the daily pg_cron refresh doesn't need a service-role
+# secret embedded anywhere (the anon key is enough, and that's already
+# public in the client bundle).
+verify_jwt = false
+import_map = "./functions/list-banks/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/list-banks/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/list-banks/*.html" ]
+
+[functions.resolve-account]
+enabled = true
+# true (the default for auth: 'user') — the platform rejects unauthenticated
+# callers before this function's own code ever runs. Account resolution is
+# tied to a specific signed-in user (rate limiting, spec section 8.1's
+# "verify the caller's JWT; reject unauthenticated requests"), unlike
+# list-banks, which is a public, user-independent maintenance operation.
+verify_jwt = true
+import_map = "./functions/resolve-account/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/resolve-account/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/resolve-account/*.html" ]
+
+[functions.submit-bank-account]
+enabled = true
+# Same reasoning as resolve-account — tied to a specific signed-in user
+# (rate limiting shares resolve-account's account_resolution_attempts
+# budget, and the row it writes is scoped to the caller).
+verify_jwt = true
+import_map = "./functions/submit-bank-account/deno.json"
+entrypoint = "./functions/submit-bank-account/index.ts"

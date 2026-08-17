@@ -220,6 +220,91 @@ Six changes requested after reviewing the running Welcome screen.
   still a plain `»` character (not touched by this round of fixes, even though
   `@expo/vector-icons` is now a real dependency — could be revisited for consistency).
 
+## Post-review fixes, round 2 — staggered section reveal
+
+One change: the welcome screen was appearing all at once (or, depending on the platform's
+default stack transition, as a single whole-screen fade) instead of revealing section by
+section — the cascading reveal pattern named explicitly in build spec section 10.1 and
+described by the project owner as "like the Access Bank app."
+
+**Root cause: the primitive existed but was never used.** `src/components/motion/Stagger.tsx`
+was built in phase 1 specifically for this — each direct child gets its own delayed
+fade+slide-up entrance — but no screen actually rendered its content through it.
+`app/(onboarding)/welcome.tsx` had no `entering` animation anywhere in its tree, so React
+Native just rendered it synchronously; whatever fade the project owner was seeing was coming
+from somewhere else (most likely the platform-default Stack screen transition, not any
+per-section animation this codebase controls).
+
+**Fix.** Wrapped `welcome.tsx`'s five visual sections in `<Stagger initialDelay={80}>`,
+matching the exact section breakdown from spec section 10.1's own usage example
+(Header/Hero/Title/Subtitle/ButtonGroup): the top bar, the hero illustration, the
+headline+subtitle block, the button stack (Browse/Get Started/social row grouped as one
+section — not staggered individually, per the rule against giving the primary CTA a long
+delay), and the footer. Used `Stagger`'s existing defaults (`step={70}`, 380ms duration) —
+nothing about the primitive itself needed to change, only its actual use.
+
+No other screens were touched. `app/(onboarding)/intro.tsx` still uses a single `FadeIn` on
+its one logo block via `IntroAnimation`, not `Stagger` — intro has one visual unit, not
+multiple sections, so there's nothing to cascade there. Every screen from phase 4 onward
+should use `Stagger` for its content by default, per spec section 10 — this was a gap in
+execution, not a gap in the plan.
+
+### Verification
+
+- `npx tsc --noEmit` → clean.
+- `npx expo-doctor` → `20/21 checks passed`, same pre-existing patch-version finding.
+- `npx expo export -p android --output-dir <tmp>` → succeeded, 1854 modules, same 37 assets
+  as before (pure behavior change, no new assets). Test export directory deleted afterward.
+
+### Open question
+
+Whether the resulting timing/feel actually matches what "like the Access Bank app" means in
+practice — that's a subjective call that needs eyes on the running app, not something a
+bundle check can confirm.
+
+## Post-review fixes, round 3 — removed spring bounce, switched to timing/ease-out
+
+Feedback after seeing round 2 running: the stagger reveal bounced too much and the fade read
+as glitchy, not clean. Wanted: no bounce, minimal/generic, "Apple style."
+
+**Root cause.** Both `Stagger.tsx` (used by `welcome.tsx`) and `IntroAnimation.tsx` (used by
+`intro.tsx`) drove their entrances with `.springify().damping(18)` — spring *physics*, not a
+fixed-duration curve. A damping value of 18 is on the lower/underdamped side for Reanimated's
+spring defaults, which is exactly what produces visible overshoot: the view moves past its
+final position and settles back, read as "bouncing." That's independent of the staggering
+logic itself, which was untouched and correct.
+
+**Fix.** Replaced spring physics with plain timing animations using an ease-out cubic curve
+in both components:
+
+```
+FadeInDown.delay(...).duration(350).easing(Easing.out(Easing.cubic))
+```
+
+No `.springify()`, no `.damping()` — a fixed-duration deceleration into place with no
+overshoot, which is the actual mechanism behind the "clean, seamless, Apple-style" motion
+being asked for (iOS system transitions are timing-curve-based, not spring-based, for exactly
+this kind of entrance). `Stagger`'s `duration` went from 380ms to 350ms and `IntroAnimation`'s
+from 700ms to 500ms — shorter, since a curve with no bounce reads as complete earlier than a
+spring that's still oscillating.
+
+Also dropped `Stagger`'s `distance` prop. It was never wired to anything in the original
+implementation (verbatim from the build spec's own snippet) — `FadeInDown` uses its own fixed
+preset offset, and the prop had no effect on it. Removing it makes the component honest about
+what it actually controls; confirmed nothing calls it with `distance` before deleting.
+
+### Verification
+
+- `npx tsc --noEmit` → clean.
+- `npx expo-doctor` → `20/21 checks passed`, same pre-existing patch-version finding.
+- `npx expo export -p android --output-dir <tmp>` → succeeded, 1854 modules, same 37 assets
+  (pure behavior change). Test export directory deleted afterward.
+
+### Open question
+
+Whether 350ms/500ms durations feel right, or need further tuning once seen running — timing
+"feel" isn't something a bundle check can confirm either way.
+
 ## What's next
 
 Phase 4: Phone entry and OTP verification screens (`(auth)/phone.tsx`, `(auth)/verify.tsx`),

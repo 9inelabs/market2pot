@@ -39,6 +39,32 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_resolution_attempts: {
+        Row: {
+          created_at: string
+          id: string
+          profile_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          profile_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_resolution_attempts_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bank_accounts: {
         Row: {
           account_number: string
@@ -76,6 +102,71 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "bank_accounts_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      banks: {
+        Row: {
+          code: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      delivery_locations: {
+        Row: {
+          address_line: string
+          created_at: string
+          geolocation: unknown
+          id: string
+          latitude: number | null
+          lga: string | null
+          longitude: number | null
+          profile_id: string
+          state: string | null
+        }
+        Insert: {
+          address_line: string
+          created_at?: string
+          geolocation?: unknown
+          id?: string
+          latitude?: number | null
+          lga?: string | null
+          longitude?: number | null
+          profile_id: string
+          state?: string | null
+        }
+        Update: {
+          address_line?: string
+          created_at?: string
+          geolocation?: unknown
+          id?: string
+          latitude?: number | null
+          lga?: string | null
+          longitude?: number | null
+          profile_id?: string
+          state?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_locations_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: true
             referencedRelation: "profiles"

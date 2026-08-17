@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn } from 'react-native-reanimated';
 
 import { LeafMark } from '@/components/brand/LeafMark';
 import { Wordmark } from '@/components/brand/Wordmark';
@@ -11,7 +11,7 @@ import { spacing } from '@/theme/tokens';
 export function IntroAnimation() {
   return (
     <Animated.View
-      entering={FadeIn.duration(700).springify().damping(18)}
+      entering={FadeIn.duration(500).easing(Easing.out(Easing.cubic))}
       style={styles.container}
     >
       <LeafMark width={112} height={123} />

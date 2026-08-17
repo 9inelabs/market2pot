@@ -5,6 +5,7 @@
 import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
 import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
 import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
+import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
 import { useFonts } from 'expo-font';
 
 // iOS SF Pro Expanded/Text .otf files are not bundled yet — see
@@ -14,6 +15,7 @@ export function useAppFonts() {
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
+    Inter_700Bold,
     'ArchivoExpanded-Medium': require('../../assets/fonts/ArchivoExpanded-Medium.ttf'),
     'ArchivoExpanded-SemiBold': require('../../assets/fonts/ArchivoExpanded-SemiBold.ttf'),
     'ArchivoExpanded-Bold': require('../../assets/fonts/ArchivoExpanded-Bold.ttf'),

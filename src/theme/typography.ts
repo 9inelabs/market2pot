@@ -22,7 +22,7 @@ if (__DEV__ && Platform.OS === 'ios' && !IOS_FONTS_BUNDLED) {
   );
 }
 
-type BodyWeight = 'regular' | 'medium' | 'semibold';
+type BodyWeight = 'regular' | 'medium' | 'semibold' | 'bold';
 
 const headerFamily: string | undefined = IOS_FONTS_BUNDLED
   ? Platform.select({ ios: 'SFProDisplay-ExpandedSemibold', android: 'ArchivoExpanded-SemiBold' })
@@ -34,19 +34,22 @@ const bodyFamilies: Record<BodyWeight, string | undefined> = IOS_FONTS_BUNDLED
         regular: 'SFProText-Regular',
         medium: 'SFProText-Medium',
         semibold: 'SFProText-Semibold',
+        bold: 'SFProText-Bold',
       },
       android: {
         regular: 'Inter_400Regular',
         medium: 'Inter_500Medium',
         semibold: 'Inter_600SemiBold',
+        bold: 'Inter_700Bold',
       },
     })!
   : Platform.select({
-      ios: { regular: undefined, medium: undefined, semibold: undefined },
+      ios: { regular: undefined, medium: undefined, semibold: undefined, bold: undefined },
       android: {
         regular: 'Inter_400Regular',
         medium: 'Inter_500Medium',
         semibold: 'Inter_600SemiBold',
+        bold: 'Inter_700Bold',
       },
     })!;
 
@@ -58,6 +61,7 @@ const iosFallbackWeight: Record<BodyWeight, TextStyle['fontWeight']> = {
   regular: '400',
   medium: '500',
   semibold: '600',
+  bold: '700',
 };
 
 function header(): TextStyle {
@@ -79,6 +83,13 @@ export const typography = {
   label: { ...body('medium'), fontSize: 14 },
   button: { ...body('semibold'), fontSize: 17 },
   caption: { ...body('regular'), fontSize: 13 },
+  // Headline/subtitle for every screen EXCEPT Welcome — Archivo Expanded
+  // (the `header` family above) is reserved for Welcome's brand moment,
+  // matching the wordmark. Everywhere else (phone, OTP, name, photo,
+  // location, role...) uses the body family at these sizes instead — SF
+  // Pro Text on iOS (via the system-font fallback), Inter on Android.
+  stepHeadline: { ...body('bold'), fontSize: 30 },
+  stepSubtitle: { ...body('semibold'), fontSize: 13, letterSpacing: 0 },
 } as const satisfies Record<string, TextStyle>;
 
 // Raw family names — used by the font-loading hook to know what it must load,

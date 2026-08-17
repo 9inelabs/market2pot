@@ -25,7 +25,21 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-splash-screen"
+      "expo-splash-screen",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Market2pot needs access to your photos so you can set a profile picture.",
+          "cameraPermission": "Market2pot needs access to your camera so you can take a profile picture."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Market2pot uses your location to fill in your delivery address and show you farmers near you."
+        }
+      ],
+      "@react-native-community/datetimepicker"
     ]
   }
 }

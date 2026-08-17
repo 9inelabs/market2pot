@@ -8,13 +8,20 @@
 // Creates two throwaway users, seeds a row per table for each, signs in as
 // user A, and asserts:
 //   - user A cannot SELECT, UPDATE, or DELETE user B's profiles /
-//     farm_locations / bank_accounts rows (0 rows affected each time)
+//     farm_locations / delivery_locations / bank_accounts rows (0 rows
+//     affected each time)
 //   - user A CAN read and update their OWN rows in all three tables — a
 //     policy that blocked everything would otherwise pass the negative
 //     checks above trivially
 //   - user A cannot self-verify their own bank_accounts row by writing
 //     verification_status / name_match_score / resolved_account_name
 //     (column-level GRANTs, not RLS, are what block this)
+//   - banks is public-read (any authenticated user can SELECT) but has no
+//     insert/update/delete policy at all — only the service role (used
+//     inside the list-banks Edge Function) can write
+//   - user A cannot SELECT user B's account_resolution_attempts rows, CAN
+//     insert/select their own, and cannot insert a row claiming to be user B
+//     (the rate-limit log's only two policies are select_own/insert_own)
 //
 // Deletes both users (and their cascaded rows) whether the assertions pass
 // or fail.
@@ -96,14 +103,24 @@ async function signInAsClient(user: TestUser) {
   return client;
 }
 
-// Seeds a farm_locations and bank_accounts row for a profile via the service
-// role (bypasses RLS by design — this is test setup, not the thing under test).
+// Seeds a farm_locations, delivery_locations, and bank_accounts row for a
+// profile via the service role (bypasses RLS by design — this is test
+// setup, not the thing under test).
 async function seedRowsFor(profileId: string, bankName: string): Promise<void> {
   const { error: farmLocationError } = await admin
     .from('farm_locations')
     .insert({ profile_id: profileId, address_line: '1 Farm Way' });
   if (farmLocationError) {
     throw new Error(`Failed to seed farm_locations for ${profileId}: ${farmLocationError.message}`);
+  }
+
+  const { error: deliveryLocationError } = await admin
+    .from('delivery_locations')
+    .insert({ profile_id: profileId, address_line: '1 Delivery Way' });
+  if (deliveryLocationError) {
+    throw new Error(
+      `Failed to seed delivery_locations for ${profileId}: ${deliveryLocationError.message}`
+    );
   }
 
   const { error: bankAccountError } = await admin.from('bank_accounts').insert({
@@ -116,6 +133,22 @@ async function seedRowsFor(profileId: string, bankName: string): Promise<void> {
   });
   if (bankAccountError) {
     throw new Error(`Failed to seed bank_accounts for ${profileId}: ${bankAccountError.message}`);
+  }
+}
+
+// banks isn't per-user — seed one throwaway row via the service role so the
+// write-rejection tests below have a real row to target.
+async function seedBankRow(code: string): Promise<void> {
+  const { error } = await admin.from('banks').insert({ code, name: 'RLS Test Bank' });
+  if (error) {
+    throw new Error(`Failed to seed banks row: ${error.message}`);
+  }
+}
+
+async function deleteBankRow(code: string): Promise<void> {
+  const { error } = await admin.from('banks').delete().eq('code', code);
+  if (error) {
+    console.error(`Warning: failed to delete test banks row ${code}: ${error.message}`);
   }
 }
 
@@ -154,11 +187,13 @@ async function main() {
   console.log('Creating two throwaway users (user A, user B)...');
   const userA = await createTestUser('a');
   const userB = await createTestUser('b');
+  const testBankCode = `RLS${randomSuffix()}`;
 
   try {
     console.log("Seeding a farm_locations and bank_accounts row for both users...");
     await seedRowsFor(userA.id, 'User A Bank');
     await seedRowsFor(userB.id, 'User B Bank');
+    await seedBankRow(testBankCode);
 
     console.log('Signing in as user A...');
     const clientA = await signInAsClient(userA);
@@ -171,6 +206,12 @@ async function main() {
 
     const selFarm = await clientA.from('farm_locations').select('*').eq('profile_id', userB.id);
     assertZeroRows('farm_locations SELECT (cross-user)', selFarm.data, selFarm.error);
+
+    const selDelivery = await clientA
+      .from('delivery_locations')
+      .select('*')
+      .eq('profile_id', userB.id);
+    assertZeroRows('delivery_locations SELECT (cross-user)', selDelivery.data, selDelivery.error);
 
     const selBank = await clientA.from('bank_accounts').select('*').eq('profile_id', userB.id);
     assertZeroRows('bank_accounts SELECT (cross-user)', selBank.data, selBank.error);
@@ -191,6 +232,13 @@ async function main() {
       .eq('profile_id', userB.id)
       .select();
     assertZeroRows('farm_locations UPDATE (cross-user)', updFarm.data, updFarm.error);
+
+    const updDelivery = await clientA
+      .from('delivery_locations')
+      .update({ address_line: 'Hijacked' })
+      .eq('profile_id', userB.id)
+      .select();
+    assertZeroRows('delivery_locations UPDATE (cross-user)', updDelivery.data, updDelivery.error);
 
     const updBank = await clientA
       .from('bank_accounts')
@@ -217,6 +265,13 @@ async function main() {
       .select();
     assertZeroRows('farm_locations DELETE (cross-user)', delFarm.data, delFarm.error);
 
+    const delDelivery = await clientA
+      .from('delivery_locations')
+      .delete()
+      .eq('profile_id', userB.id)
+      .select();
+    assertZeroRows('delivery_locations DELETE (cross-user)', delDelivery.data, delDelivery.error);
+
     const delBank = await clientA
       .from('bank_accounts')
       .delete()
@@ -234,6 +289,12 @@ async function main() {
 
     const ownFarm = await clientA.from('farm_locations').select('*').eq('profile_id', userA.id);
     assertOneRow('farm_locations SELECT (own row)', ownFarm.data, ownFarm.error);
+
+    const ownDelivery = await clientA
+      .from('delivery_locations')
+      .select('*')
+      .eq('profile_id', userA.id);
+    assertOneRow('delivery_locations SELECT (own row)', ownDelivery.data, ownDelivery.error);
 
     const ownBank = await clientA.from('bank_accounts').select('*').eq('profile_id', userA.id);
     assertOneRow('bank_accounts SELECT (own row)', ownBank.data, ownBank.error);
@@ -259,6 +320,18 @@ async function main() {
     assertOneRow('farm_locations UPDATE (own row)', updOwnFarm.data, updOwnFarm.error);
     if (updOwnFarm.data?.[0]?.address_line !== '2 New Farm Way') {
       throw new Error('farm_locations UPDATE (own row): row returned but address_line was not updated');
+    }
+
+    const updOwnDelivery = await clientA
+      .from('delivery_locations')
+      .update({ address_line: '2 New Delivery Way' })
+      .eq('profile_id', userA.id)
+      .select();
+    assertOneRow('delivery_locations UPDATE (own row)', updOwnDelivery.data, updOwnDelivery.error);
+    if (updOwnDelivery.data?.[0]?.address_line !== '2 New Delivery Way') {
+      throw new Error(
+        'delivery_locations UPDATE (own row): row returned but address_line was not updated'
+      );
     }
 
     // bank_name is not column-protected — only resolved_account_name /
@@ -300,9 +373,75 @@ async function main() {
     }
     console.log('PASS  bank_accounts self-verify: protected columns unchanged, confirmed via service role');
 
+    // --- banks: public read, but writes blocked for every authenticated user
+    console.log('\nChecking banks table (public read, service-role-only write)...');
+
+    const banksRead = await clientA.from('banks').select('*').eq('code', testBankCode);
+    assertOneRow('banks SELECT (public read)', banksRead.data, banksRead.error);
+
+    const banksInsert = await clientA
+      .from('banks')
+      .insert({ code: `${testBankCode}-X`, name: 'Should Not Insert' })
+      .select();
+    assertRejected('banks INSERT (no policy for authenticated users)', banksInsert.error);
+
+    const banksUpdate = await clientA
+      .from('banks')
+      .update({ name: 'Hijacked' })
+      .eq('code', testBankCode)
+      .select();
+    assertZeroRows('banks UPDATE (no policy for authenticated users)', banksUpdate.data, banksUpdate.error);
+
+    const banksDelete = await clientA.from('banks').delete().eq('code', testBankCode).select();
+    assertZeroRows('banks DELETE (no policy for authenticated users)', banksDelete.data, banksDelete.error);
+
+    // --- account_resolution_attempts: owner-only select/insert, immutable log
+    console.log('\nChecking account_resolution_attempts table (owner-only select/insert)...');
+
+    const attemptsCrossSelect = await clientA
+      .from('account_resolution_attempts')
+      .select('*')
+      .eq('profile_id', userB.id);
+    assertZeroRows(
+      'account_resolution_attempts SELECT (cross-user)',
+      attemptsCrossSelect.data,
+      attemptsCrossSelect.error
+    );
+
+    const attemptsCrossInsert = await clientA
+      .from('account_resolution_attempts')
+      .insert({ profile_id: userB.id })
+      .select();
+    assertRejected(
+      'account_resolution_attempts INSERT (claiming to be user B)',
+      attemptsCrossInsert.error
+    );
+
+    const attemptsOwnInsert = await clientA
+      .from('account_resolution_attempts')
+      .insert({ profile_id: userA.id })
+      .select();
+    assertOneRow(
+      'account_resolution_attempts INSERT (own row)',
+      attemptsOwnInsert.data,
+      attemptsOwnInsert.error
+    );
+
+    const attemptsOwnSelect = await clientA
+      .from('account_resolution_attempts')
+      .select('*')
+      .eq('profile_id', userA.id);
+    assertOneRow(
+      'account_resolution_attempts SELECT (own row)',
+      attemptsOwnSelect.data,
+      attemptsOwnSelect.error
+    );
+
     console.log('\nAll RLS checks passed.');
   } finally {
     console.log('\nCleaning up test users...');
+    await deleteBankRow(testBankCode);
+    await deleteBankRow(`${testBankCode}-X`);
     await deleteTestUser(userA);
     await deleteTestUser(userB);
   }

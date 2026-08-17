@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
+import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
+import type { ComponentProps, ReactNode } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
 
 import { colors, geometry, withOpacity } from '@/theme/tokens';
 import { typography } from '@/theme/typography';
@@ -10,31 +11,59 @@ type Props = {
   label: string;
   onPress: () => void;
   variant?: Variant;
-  // Renders at 40% opacity and calls onPress with the gated behavior still
-  // wired up by the caller (e.g. showing a "Coming soon" toast instead of
-  // navigating) — per build spec section 7.2, disabled buttons are never
-  // removed, just dimmed.
+  // Dims to 40% opacity and genuinely blocks onPress (validation gates —
+  // nothing is happening, tapping just wouldn't do anything valid yet). For
+  // a button that should stay tappable but do something different while
+  // "off" (e.g. Welcome's feature-flagged buttons showing a "Coming soon"
+  // toast), don't pass disabled — just branch inside onPress instead.
   disabled?: boolean;
+  // A request is genuinely in flight — swaps the label for a spinner (full
+  // color, not dimmed, since something IS actively happening) and blocks
+  // onPress the same as disabled. Distinct from `disabled` on purpose: a
+  // dimmed-but-static button reads as "broken" while something is loading.
+  loading?: boolean;
+  icon?: ComponentProps<typeof FontAwesome5>['name'];
   style?: StyleProp<ViewStyle>;
   children?: ReactNode;
 };
 
-export function Button({ label, onPress, variant = 'primary', disabled, style }: Props) {
+export function Button({
+  label,
+  onPress,
+  variant = 'primary',
+  disabled,
+  loading,
+  icon,
+  style,
+}: Props) {
+  const textColor = variant === 'primary' ? colors.surface : colors.harvestGreen;
+
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled || loading}
       style={[
         styles.base,
         variant === 'primary' ? styles.primary : styles.secondary,
-        disabled && styles.disabled,
+        disabled && !loading && styles.disabled,
         style,
       ]}
     >
-      <Text
-        style={[typography.button, variant === 'primary' ? styles.primaryText : styles.secondaryText]}
-      >
-        {label}
-      </Text>
+      {loading ? (
+        <ActivityIndicator color={textColor} />
+      ) : (
+        <>
+          {icon ? <FontAwesome5 name={icon} size={16} color={textColor} /> : null}
+          <Text
+            style={[
+              typography.button,
+              variant === 'primary' ? styles.primaryText : styles.secondaryText,
+            ]}
+          >
+            {label}
+          </Text>
+        </>
+      )}
     </Pressable>
   );
 }
@@ -43,8 +72,10 @@ const styles = StyleSheet.create({
   base: {
     height: geometry.primaryButton.height,
     borderRadius: geometry.primaryButton.radius,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
     paddingHorizontal: geometry.screenPaddingButtons,
   },
   primary: {

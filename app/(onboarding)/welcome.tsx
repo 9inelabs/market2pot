@@ -8,6 +8,7 @@ import { ComingSoonToast } from '@/components/feedback/ComingSoonToast';
 import { useComingSoonToast } from '@/components/feedback/useComingSoonToast';
 import { HeroIllustration } from '@/components/marketing/HeroIllustration';
 import { LeafWatermark } from '@/components/marketing/LeafWatermark';
+import { Stagger } from '@/components/motion/Stagger';
 import { Button } from '@/components/ui/Button';
 import { SignInPill } from '@/components/ui/SignInPill';
 import { SocialButton } from '@/components/ui/SocialButton';
@@ -20,8 +21,16 @@ export default function WelcomeScreen() {
   const { visible: toastVisible, show: showComingSoon } = useComingSoonToast();
   const { height: windowHeight } = useWindowDimensions();
 
-  const goToPhone = (mode: 'signup' | 'login') => {
-    router.push({ pathname: '/(auth)/phone', params: { mode } });
+  // Existing users (Sign In) go straight to phone entry. New users (Get
+  // Started) pick a role first — role is chosen before an account exists,
+  // so it can't be written to the DB yet; it's carried as a route param
+  // through phone -> verify instead. See (profile)/role.tsx.
+  const goToSignIn = () => {
+    router.push({ pathname: '/(auth)/phone', params: { mode: 'login' } });
+  };
+
+  const goToRoleSelection = () => {
+    router.push('/(profile)/role');
   };
 
   return (
@@ -29,57 +38,59 @@ export default function WelcomeScreen() {
       <LeafWatermark />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.topBar}>
-          <View style={styles.brandRow}>
-            <LeafMark width={35} height={38} />
-            {/* Wordmark width isn't specified for the top bar (only intro's
-                ~190x57 is) — scaled to the leaf mark's height using the
-                asset's own aspect ratio (831:231). */}
-            <Wordmark width={137} height={38} />
+        <Stagger initialDelay={80}>
+          <View style={styles.topBar}>
+            <View style={styles.brandRow}>
+              <LeafMark width={35} height={38} />
+              {/* Wordmark width isn't specified for the top bar (only intro's
+                  ~190x57 is) — scaled to the leaf mark's height using the
+                  asset's own aspect ratio (831:231). */}
+              <Wordmark width={137} height={38} />
+            </View>
+            <SignInPill onPress={goToSignIn} />
           </View>
-          <SignInPill onPress={() => goToPhone('login')} />
-        </View>
 
-        {/* height computed from window size, not a CSS percentage — percentage
-            heights don't resolve inside a ScrollView's content container,
-            which is itself sized by its content. */}
-        <View style={[styles.heroWrap, { height: Math.max(windowHeight * 0.4, 240) }]}>
-          <HeroIllustration />
-        </View>
-
-        <View style={styles.textBlock}>
-          <Text style={[typography.h1, styles.title]}>{strings.welcomeHeadline}</Text>
-          <Text style={[typography.body, styles.subtitle]}>{strings.welcomeSubtitle}</Text>
-        </View>
-
-        <View style={styles.buttonStack}>
-          <Button
-            label={strings.welcomeBrowseProducts}
-            variant="secondary"
-            style={styles.browseButton}
-            onPress={() => (ENABLE_GUEST_BROWSE ? router.push('/browse') : showComingSoon())}
-          />
-          <Button
-            label={strings.welcomeGetStarted}
-            variant="primary"
-            style={styles.getStartedButton}
-            onPress={() => goToPhone('signup')}
-          />
-          <View style={styles.socialRow}>
-            <SocialButton
-              provider="google"
-              label={strings.welcomeContinueWithGoogle}
-              onPress={() => (ENABLE_GOOGLE_AUTH ? undefined : showComingSoon())}
-            />
-            <SocialButton
-              provider="apple"
-              label={strings.welcomeSignInWithApple}
-              onPress={() => (ENABLE_APPLE_AUTH ? undefined : showComingSoon())}
-            />
+          {/* height computed from window size, not a CSS percentage — percentage
+              heights don't resolve inside a ScrollView's content container,
+              which is itself sized by its content. */}
+          <View style={[styles.heroWrap, { height: Math.max(windowHeight * 0.4, 240) }]}>
+            <HeroIllustration />
           </View>
-        </View>
 
-        <Text style={[typography.caption, styles.footer]}>{strings.welcomeFooter}</Text>
+          <View style={styles.textBlock}>
+            <Text style={[typography.h1, styles.title]}>{strings.welcomeHeadline}</Text>
+            <Text style={[typography.body, styles.subtitle]}>{strings.welcomeSubtitle}</Text>
+          </View>
+
+          <View style={styles.buttonStack}>
+            <Button
+              label={strings.welcomeBrowseProducts}
+              variant="secondary"
+              style={styles.browseButton}
+              onPress={() => (ENABLE_GUEST_BROWSE ? router.push('/browse') : showComingSoon())}
+            />
+            <Button
+              label={strings.welcomeGetStarted}
+              variant="primary"
+              style={styles.getStartedButton}
+              onPress={goToRoleSelection}
+            />
+            <View style={styles.socialRow}>
+              <SocialButton
+                provider="google"
+                label={strings.welcomeContinueWithGoogle}
+                onPress={() => (ENABLE_GOOGLE_AUTH ? undefined : showComingSoon())}
+              />
+              <SocialButton
+                provider="apple"
+                label={strings.welcomeSignInWithApple}
+                onPress={() => (ENABLE_APPLE_AUTH ? undefined : showComingSoon())}
+              />
+            </View>
+          </View>
+
+          <Text style={[typography.caption, styles.footer]}>{strings.welcomeFooter}</Text>
+        </Stagger>
       </ScrollView>
 
       <ComingSoonToast visible={toastVisible} />
