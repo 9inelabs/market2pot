@@ -17,6 +17,10 @@ type Props = {
   cancelLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
+  // Delete/remove-type confirms — swaps the confirm button and icon badge
+  // to danger red instead of harvestGreen, so "Delete" doesn't read as a
+  // positive/go action.
+  destructive?: boolean;
 };
 
 // A premium two-button confirmation dialog — icon badge, title, message,
@@ -33,12 +37,15 @@ export function ConfirmDialog({
   cancelLabel,
   onConfirm,
   onCancel,
+  destructive,
 }: Props) {
+  const accentColor = destructive ? colors.danger : colors.harvestGreen;
+
   return (
     <AppModal visible={visible} onRequestClose={onCancel}>
       {icon ? (
-        <View style={styles.iconWrap}>
-          <FontAwesome5 name={icon} size={22} color={colors.harvestGreen} />
+        <View style={[styles.iconWrap, { backgroundColor: withOpacity(accentColor, 0.12) }]}>
+          <FontAwesome5 name={icon} size={22} color={accentColor} />
         </View>
       ) : null}
 
@@ -47,7 +54,12 @@ export function ConfirmDialog({
 
       <View style={styles.actions}>
         <Button label={cancelLabel} variant="secondary" onPress={onCancel} style={styles.actionButton} />
-        <Button label={confirmLabel} variant="primary" onPress={onConfirm} style={styles.actionButton} />
+        <Button
+          label={confirmLabel}
+          variant="primary"
+          onPress={onConfirm}
+          style={[styles.actionButton, destructive && { backgroundColor: colors.danger }]}
+        />
       </View>
     </AppModal>
   );

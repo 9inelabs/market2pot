@@ -14,6 +14,7 @@ import { extractFunctionErrorMessage } from '@/lib/functionError';
 import { matchNames, type NameMatchStatus } from '@/lib/nameMatch';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useRegisterFarmerStore } from '@/store/useRegisterFarmerStore';
 import { colors, spacing } from '@/theme/tokens';
 import { typography } from '@/theme/typography';
 
@@ -24,8 +25,16 @@ type Resolution = {
   matchStatus: NameMatchStatus;
 };
 
-export default function BankDetailsScreen() {
+// Reuses the same auto-resolve/name-match/submit-bank-account pattern as
+// the original signup flow's bank-details.tsx. The only real difference is
+// what happens after a successful submit: this flow creates the
+// farmer_profiles row (using farm-details.tsx's farmName/bio, held in
+// useRegisterFarmerStore) and flips active_view, rather than advancing the
+// original signup's onboarding_step.
+export default function RegisterFarmerBankDetailsScreen() {
   const fullName = useAuthStore((state) => state.profile?.full_name);
+  const fetchProfile = useAuthStore((state) => state.fetchProfile);
+  const { farmName, bio, reset } = useRegisterFarmerStore();
   const { banks, loading: banksLoading } = useBanks();
 
   const [selectedBank, setSelectedBank] = useState<Bank | null>(null);
@@ -37,8 +46,17 @@ export default function BankDetailsScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Auto-resolve once 10 digits and a bank are both present — build spec
-  // section 7.8: "On 10 digits and a bank selected → auto-resolve."
+  // A user who reaches this screen without having gone through
+  // farm-details.tsx first (e.g. deep-linked, or backed out and re-entered
+  // oddly) has no farmName yet — send them back to the start of this wizard
+  // rather than letting them create a farmer_profiles row with an empty
+  // required field.
+  useEffect(() => {
+    if (!farmName.trim()) {
+      router.replace('/(app)/register-farmer/farm-details');
+    }
+  }, [farmName]);
+
   useEffect(() => {
     setResolution(null);
     setResolveError(null);
@@ -90,30 +108,46 @@ export default function BankDetailsScreen() {
     setSubmitError(null);
 
     try {
-      // Writing bank_accounts happens entirely server-side, in
-      // submit-bank-account — it re-verifies via Paystack and upserts with
-      // the service role, since bank_accounts_update_own's column grants
-      // deliberately block the client from writing
-      // resolved_account_name/name_match_score/verification_status itself
-      // (would let a farmer self-verify). A plain client-side insert also
-      // can't be resubmitted at all: bank_accounts has a unique(profile_id)
-      // constraint and no delete policy, so a second insert always fails.
-      const { data, error } = await supabase.functions.invoke<{
-        account_name: string;
-        bank_name: string | null;
-        match_score: number;
-        match_status: NameMatchStatus;
-      }>('submit-bank-account', {
-        body: { account_number: accountNumber, bank_code: selectedBank.code },
-      });
-      if (error || !data) {
-        setSubmitError(await extractFunctionErrorMessage(error));
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+      if (userError || !user) {
+        setSubmitError(userError?.message ?? 'Your session expired — sign in again.');
         return;
       }
 
-      // step stays bank_pending — review-profile.tsx is the true final
-      // gate; it advances to 'complete' on confirm.
-      router.push('/(profile)/review-profile');
+      const { data: submitData, error: submitFnError } = await supabase.functions.invoke(
+        'submit-bank-account',
+        { body: { account_number: accountNumber, bank_code: selectedBank.code } }
+      );
+      if (submitFnError || !submitData) {
+        setSubmitError(await extractFunctionErrorMessage(submitFnError));
+        return;
+      }
+
+      const { error: farmerProfileError } = await supabase.from('farmer_profiles').insert({
+        profile_id: user.id,
+        farm_name: farmName.trim(),
+        bio: bio.trim() || null,
+      });
+      if (farmerProfileError) {
+        setSubmitError(farmerProfileError.message);
+        return;
+      }
+
+      const { error: viewError } = await supabase
+        .from('profiles')
+        .update({ active_view: 'farmer' })
+        .eq('id', user.id);
+      if (viewError) {
+        setSubmitError(viewError.message);
+        return;
+      }
+
+      reset();
+      await fetchProfile();
+      router.replace('/(app)/(tabs)');
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Something went wrong. Try again.');
     } finally {
@@ -179,21 +213,14 @@ export default function BankDetailsScreen() {
       {resolution?.matchStatus === 'blocked' ? (
         <View style={styles.mismatchBlock}>
           <Text style={[typography.caption, styles.error]}>{strings.bankNameMismatch}</Text>
-          <View style={styles.mismatchActions}>
-            <Button
-              label={strings.bankNameMismatchEditAction}
-              variant="secondary"
-              onPress={() => router.push('/(profile)/identity-name')}
-            />
-            <Button
-              label={strings.bankNameMismatchRetryAction}
-              variant="secondary"
-              onPress={() => {
-                setAccountNumber('');
-                setResolution(null);
-              }}
-            />
-          </View>
+          <Button
+            label={strings.bankNameMismatchRetryAction}
+            variant="secondary"
+            onPress={() => {
+              setAccountNumber('');
+              setResolution(null);
+            }}
+          />
         </View>
       ) : null}
 
@@ -221,10 +248,6 @@ const styles = {
     textAlign: 'center' as const,
   },
   mismatchBlock: {
-    gap: spacing[12],
-  },
-  mismatchActions: {
-    flexDirection: 'row' as const,
     gap: spacing[12],
   },
 };

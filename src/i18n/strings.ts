@@ -162,6 +162,161 @@ export const strings = {
   // Farmer sign-up complete — (app)/index.tsx equivalent for farmers isn't
   // built yet beyond the shared placeholder; kept here for the review
   // screen's post-confirm state if needed later.
+
+  // App shell — shared across both Home variants and the tab bar.
+  comingSoonMessage: "This is coming in a future update — we're working on it.",
+
+  // Household Home — (app)/(tabs)/index.tsx, matches assets/materials/Home page.png
+  homeSearchPlaceholder: 'Search fresh produce',
+  homeRegisterBannerTitle: 'Have produce to sell?',
+  homeRegisterBannerSubtitle: 'Register as a farmer and reach households near you',
+  homeFarmersNearYou: 'Farmers Near You',
+  homeFreshPicks: 'Fresh Picks',
+  homeNoLocationTitle: 'Set your delivery location',
+  homeNoLocationMessage: 'Add an address so we can show farmers and produce near you.',
+  homeNoFarmersTitle: 'No farmers nearby yet',
+  homeNoFarmersMessage: "We're growing — check back again soon.",
+  homeNoProductsTitle: 'Nothing fresh listed yet',
+  homeNoProductsMessage: 'Check back soon for new produce.',
+  homeNotificationsLabel: 'Notifications',
+  homeCartLabel: 'Cart',
+  homeLocationLabel: 'Delivery location',
+
+  // Farmer Home — (app)/(tabs)/index.tsx, farmer branch. No mockup for
+  // this one — built to match the household variant's structure/spacing
+  // per the instruction to use it as context for related screens.
+  farmerHomeStatListings: 'Active Listings',
+  farmerHomeStatPendingOrders: 'Pending Orders',
+  farmerHomeStatWeekTotal: 'This Week',
+  farmerHomeAddListing: 'Add New Listing',
+  farmerHomeQuickListings: 'My Listings',
+  farmerHomeQuickOrders: 'Orders',
+  farmerHomeQuickMessages: 'Messages',
+  farmerHomeQuickEditProfile: 'Edit Profile',
+  farmerHomeQuickBankDetails: 'Bank Details',
+  farmerHomeQuickSettings: 'Settings',
+  farmerHomeRecentOrders: 'Recent Orders',
+  farmerHomeMyListings: 'My Listings',
+  farmerHomeNoOrdersTitle: 'No orders yet',
+  farmerHomeNoOrdersMessage: 'Orders from households will show up here.',
+  farmerHomeNoListingsTitle: 'List your first product',
+  farmerHomeNoListingsMessage:
+    'Households nearby are ready to buy fresh — add your first listing to get started.',
+  farmerHomeNoListingsAction: 'Add Listing',
+
+  // Listings tab — (app)/(tabs)/listings.tsx
+  listingsTitle: 'My Listings',
+  listingsEmptyTitle: 'No listings yet',
+  listingsEmptyMessage: 'Add your first product so households nearby can find it.',
+  listingsDeleteTitle: 'Delete this listing?',
+  listingsDeleteMessage: "This can't be undone — the listing will be removed for good.",
+  listingsDeleteConfirm: 'Delete',
+  listingsDeleteCancel: 'Cancel',
+  listingsAddLabel: 'Add listing',
+
+  // Add/edit listing — (app)/listing/add.tsx, (app)/listing/[id].tsx
+  listingFormTitleAdd: 'Add Listing',
+  listingFormTitleEdit: 'Edit Listing',
+  listingFormPhotoLabel: 'Photo',
+  listingFormName: 'Product name',
+  listingFormNamePlaceholder: 'e.g. Fresh Tomatoes',
+  listingFormCategory: 'Category',
+  listingFormCategoryPlaceholder: 'e.g. Vegetables',
+  listingFormPrice: 'Price (NGN)',
+  listingFormPricePlaceholder: '0',
+  listingFormUnit: 'Unit',
+  listingFormUnitPlaceholder: 'e.g. basket, kg',
+  listingFormQuantity: 'Quantity available',
+  listingFormQuantityPlaceholder: '0',
+  listingFormHarvestDate: 'Harvest date (optional)',
+  listingFormHarvestDatePlaceholder: 'Select a date',
+  listingFormSave: 'Save Listing',
+  listingFormRequired: 'Fill in the product name, category, price, and unit to continue',
+  listingFormPriceInvalid: 'Enter a valid price',
+
+  // Farmer Profile (household-facing) — (app)/farmer/[id].tsx
+  farmerProfileMessage: 'Message',
+  farmerProfileSaveLabel: 'Save farmer',
+  farmerProfileNoBio: "This farmer hasn't added a bio yet.",
+  farmerProfileListings: 'Listings',
+  farmerProfileNoListings: 'No listings yet',
+  farmerProfileNoListingsMessage: 'Check back soon for fresh produce from this farm.',
+  farmerProfileReviews: 'Reviews',
+  farmerProfileNoReviews: 'No reviews yet',
+  farmerProfileNoReviewsMessage: 'Be the first to order and leave a review.',
+  farmerProfileNotFound: 'This farmer profile could not be found.',
+
+  // Nearby Farmers full list — (app)/nearby-farmers.tsx
+  nearbyFarmersTitle: 'Farmers Near You',
+
+  // Register as a farmer — (app)/register-farmer/*.tsx. Reuses the farm
+  // location + bank steps' underlying hooks/components from the original
+  // signup flow, but skips phone/OTP (already authenticated) and starts
+  // with a new farm-details step, since the original flow never collected
+  // a distinct farm name.
+  registerFarmerFarmDetailsHeadline: "Let's set up your farm",
+  registerFarmerFarmDetailsSubtitle: 'Tell households what to call your farm',
+  registerFarmerFarmNameLabel: 'Farm name',
+  registerFarmerFarmNamePlaceholder: 'e.g. Adeyemi Family Farm',
+  registerFarmerFarmNameRequired: 'Enter a farm name to continue',
+  registerFarmerBioLabel: 'About your farm (optional)',
+  registerFarmerBioPlaceholder: 'What do you grow? How long have you been farming?',
+  registerFarmerContinue: 'Continue',
+  // Location and bank steps reuse farmLocation*/bankDetails* strings
+  // above verbatim — same copy, same underlying hooks/components, just a
+  // different completion handler (this flow creates farmer_profiles at the
+  // end instead of advancing the original signup's onboarding_step).
+
+  // Settings — (app)/(tabs)/profile.tsx and (app)/settings/*.tsx
+  settingsTitle: 'Settings',
+  settingsAccountGroup: 'Account',
+  settingsEditProfile: 'Edit Profile',
+  settingsPhoneNumber: 'Phone Number',
+  settingsLanguage: 'Language',
+  settingsLanguageValue: 'English',
+  settingsNotifications: 'Notifications',
+  settingsPayoutGroup: 'Payouts',
+  settingsPayoutBankDetails: 'Bank Details',
+  settingsModeGroup: 'Mode',
+  settingsSwitchToFarmer: 'Switch to Selling',
+  settingsSwitchToHousehold: 'Switch to Shopping',
+  settingsSwitchModeDescription: 'Flips which Home and tabs you see',
+  settingsSupportGroup: 'Support',
+  settingsHelp: 'Help & Support',
+  settingsTerms: 'Terms & Conditions',
+  settingsPrivacy: 'Privacy Policy',
+  settingsRegisterFarmer: 'Register as a Farmer',
+  settingsLogout: 'Log Out',
+  settingsLogoutConfirmTitle: 'Log out?',
+  settingsLogoutConfirmMessage: "You'll need to sign in again to continue.",
+  settingsDeleteAccount: 'Delete Account',
+  settingsDeleteAccountConfirmTitle: 'Delete your account?',
+  settingsDeleteAccountConfirmMessage:
+    'This will permanently remove your account and all your data. This cannot be undone.',
+  settingsDeleteAccountUnavailable:
+    "Account deletion isn't available yet — contact support and we'll take care of it.",
+  settingsConfirmAction: 'Confirm',
+  settingsCancelAction: 'Cancel',
+
+  // Edit Profile — (app)/settings/edit-profile.tsx
+  editProfileTitle: 'Edit Profile',
+  editProfileFullName: 'Full name',
+  editProfileFarmName: 'Farm name',
+  editProfileBio: 'About your farm',
+  editProfileSave: 'Save Changes',
+  editProfileSaved: 'Profile updated',
+  editProfileRequired: 'Enter your full name to continue',
+
+  // Payout & Bank Details (Settings) — (app)/settings/bank-details.tsx
+  settingsBankDetailsTitle: 'Payout & Bank Details',
+  settingsBankDetailsCurrentLabel: 'Current payout account',
+  settingsBankDetailsNone: "You haven't added a payout account yet.",
+  settingsBankDetailsUpdate: 'Update Bank Details',
+
+  // Help & Support — (app)/settings/help.tsx
+  helpTitle: 'Help & Support',
+  helpBody:
+    'Need a hand? Reach out to us at support@market2pot.com and we’ll get back to you as soon as we can.',
 } as const;
 
 export type StringKey = keyof typeof strings;

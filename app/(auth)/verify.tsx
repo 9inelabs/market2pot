@@ -50,7 +50,7 @@ export default function VerifyScreen() {
     }
     const { error } = await supabase
       .from('profiles')
-      .update({ role, step: 'identity_pending' })
+      .update({ role, step: 'identity_pending', active_view: role === 'farmer' ? 'farmer' : 'household' })
       .eq('id', user.id);
     if (error) {
       throw error;
