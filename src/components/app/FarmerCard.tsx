@@ -1,6 +1,6 @@
+import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { LeafMark } from '@/components/brand/LeafMark';
 import { AvatarPicker } from '@/components/ui/AvatarPicker';
 import { getInitials } from '@/lib/initials';
 import { colors, spacing } from '@/theme/tokens';
@@ -30,7 +30,7 @@ export function FarmerCard({ name, avatarUrl, locationLine, onPress }: Props) {
         <Text style={[typography.label, styles.name]} numberOfLines={1}>
           {name}
         </Text>
-        <LeafMark width={11} height={12} />
+        <FontAwesome5 name="check-circle" size={14} color={colors.harvestGreen} solid />
       </View>
 
       <Text style={styles.verified}>Verified farmer</Text>
@@ -85,13 +85,17 @@ const styles = StyleSheet.create({
     minWidth: 64,
     borderRadius: 15,
     paddingHorizontal: spacing[12],
-    backgroundColor: colors.terracotta,
+    backgroundColor: colors.goldenWheat,
     alignItems: 'center',
     justifyContent: 'center',
   },
   viewLabel: {
     ...typography.caption,
     fontSize: 12,
-    color: colors.surface,
+    // Golden Wheat is a bright mid-tone — white text on it fails WCAG AA
+    // (goldenWheat is only meant as a decorative accent per theme/tokens.ts'
+    // own comment). Dark text keeps the button legible.
+    color: colors.deepSoil,
+    fontWeight: '600',
   },
 });

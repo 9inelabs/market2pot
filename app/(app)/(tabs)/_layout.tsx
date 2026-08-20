@@ -1,10 +1,12 @@
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import { Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
-import { StyleSheet, type ColorValue } from 'react-native';
+import { StyleSheet, View, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CountBadge } from '@/components/app/CountBadge';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useUnreadMessageCount } from '@/hooks/useUnreadMessageCount';
 import { colors } from '@/theme/tokens';
 import { fontFamilies } from '@/theme/typography';
 
@@ -14,6 +16,16 @@ function tabIcon(name: IconName) {
   // eslint-disable-next-line react/display-name
   return ({ color, size }: { color: ColorValue; size: number }) => (
     <FontAwesome5 name={name} size={size} color={color as string} />
+  );
+}
+
+function MessagesTabIcon({ color, size }: { color: ColorValue; size: number }) {
+  const unreadCount = useUnreadMessageCount();
+  return (
+    <View>
+      <FontAwesome5 name="comment-dots" size={size} color={color as string} />
+      <CountBadge count={unreadCount} />
+    </View>
   );
 }
 
@@ -57,7 +69,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: tabIcon('home') }} />
 
       <Tabs.Protected guard={!isFarmerView}>
-        <Tabs.Screen name="search" options={{ title: 'Search', tabBarIcon: tabIcon('search') }} />
+        <Tabs.Screen name="search" options={{ title: 'Products', tabBarIcon: tabIcon('th-large') }} />
       </Tabs.Protected>
 
       <Tabs.Protected guard={isFarmerView}>
@@ -71,7 +83,7 @@ export default function TabsLayout() {
 
       <Tabs.Screen
         name="messages"
-        options={{ title: 'Messages', tabBarIcon: tabIcon('comment-dots') }}
+        options={{ title: 'Messages', tabBarIcon: MessagesTabIcon }}
       />
 
       <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: tabIcon('user') }} />

@@ -8,6 +8,7 @@ import { ComingSoonToast } from '@/components/feedback/ComingSoonToast';
 import { useComingSoonToast } from '@/components/feedback/useComingSoonToast';
 import { HeroIllustration } from '@/components/marketing/HeroIllustration';
 import { LeafWatermark } from '@/components/marketing/LeafWatermark';
+import { PhotoBackdrop } from '@/components/marketing/PhotoBackdrop';
 import { Stagger } from '@/components/motion/Stagger';
 import { Button } from '@/components/ui/Button';
 import { SignInPill } from '@/components/ui/SignInPill';
@@ -21,12 +22,12 @@ export default function WelcomeScreen() {
   const { visible: toastVisible, show: showComingSoon } = useComingSoonToast();
   const { height: windowHeight } = useWindowDimensions();
 
-  // Existing users (Sign In) go straight to phone entry. New users (Get
-  // Started) pick a role first — role is chosen before an account exists,
-  // so it can't be written to the DB yet; it's carried as a route param
-  // through phone -> verify instead. See (profile)/role.tsx.
+  // Existing users (Sign In) go straight to phone+password login. New users
+  // (Get Started) pick a role first — role is chosen before an account
+  // exists, so it can't be written to the DB yet; it's carried as a route
+  // param through phone -> verify instead. See (profile)/role.tsx.
   const goToSignIn = () => {
-    router.push({ pathname: '/(auth)/phone', params: { mode: 'login' } });
+    router.push('/(auth)/login');
   };
 
   const goToRoleSelection = () => {
@@ -35,6 +36,7 @@ export default function WelcomeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <PhotoBackdrop>
       <LeafWatermark />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -94,6 +96,7 @@ export default function WelcomeScreen() {
       </ScrollView>
 
       <ComingSoonToast visible={toastVisible} />
+      </PhotoBackdrop>
     </SafeAreaView>
   );
 }

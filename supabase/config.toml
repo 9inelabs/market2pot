@@ -453,3 +453,52 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/submit-bank-account/deno.json"
 entrypoint = "./functions/submit-bank-account/index.ts"
+
+[functions.initialize-checkout]
+enabled = true
+# Tied to the signed-in household placing the order — order/order_items
+# pricing math has to run under a real caller identity, and the function
+# reads the caller's own cart_items via RLS.
+verify_jwt = true
+import_map = "./functions/initialize-checkout/deno.json"
+entrypoint = "./functions/initialize-checkout/index.ts"
+
+[functions.paystack-webhook]
+enabled = true
+# Paystack calls this directly with no Supabase session at all — auth is the
+# x-paystack-signature HMAC check inside the function itself, not a JWT.
+verify_jwt = false
+import_map = "./functions/paystack-webhook/deno.json"
+entrypoint = "./functions/paystack-webhook/index.ts"
+
+[functions.confirm-order-delivered]
+enabled = true
+verify_jwt = true
+import_map = "./functions/confirm-order-delivered/deno.json"
+entrypoint = "./functions/confirm-order-delivered/index.ts"
+
+[functions.confirm-order-received]
+enabled = true
+verify_jwt = true
+import_map = "./functions/confirm-order-received/deno.json"
+entrypoint = "./functions/confirm-order-received/index.ts"
+
+[functions.cancel-order]
+enabled = true
+verify_jwt = true
+import_map = "./functions/cancel-order/deno.json"
+entrypoint = "./functions/cancel-order/index.ts"
+
+[functions.process-refund]
+enabled = true
+verify_jwt = true
+import_map = "./functions/process-refund/deno.json"
+entrypoint = "./functions/process-refund/index.ts"
+
+[functions.check-phone-status]
+enabled = true
+# No session exists yet at this point in signup — same category as
+# list-banks. Returns only a tri-state status, never profile data.
+verify_jwt = false
+import_map = "./functions/check-phone-status/deno.json"
+entrypoint = "./functions/check-phone-status/index.ts"

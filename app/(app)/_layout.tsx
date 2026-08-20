@@ -24,7 +24,11 @@ export default function AppLayout() {
   }
 
   if (!session) {
-    return <Redirect href="/(onboarding)/intro" />;
+    // A session lost mid-app-use (expired token, manual sign-out from
+    // elsewhere) lands on the fast phone+password login path now, not the
+    // marketing welcome screen — matches the new "Log Out requires signing
+    // back in with phone + password" flow.
+    return <Redirect href="/(auth)/login" />;
   }
 
   return <Stack screenOptions={{ headerShown: false }} />;

@@ -12,17 +12,25 @@ type Props = {
   price: number;
   photoUrl: string | null;
   harvestDate: string | null;
-  onAddPress: () => void;
+  // Opens the product quick-view overlay — quantity selection now happens
+  // there, not as a bare increment-on-tap, since a real cart needs a real
+  // quantity per line.
+  onPress: () => void;
 };
 
-// Household-facing grid card — Fresh Picks, and the Farmer Profile screen's
-// listings grid. The photo itself isn't interactive (product detail is a
-// later phase) — only the "+" quick-add button is.
-export function ProductCard({ name, unit, price, photoUrl, harvestDate, onAddPress }: Props) {
+// Household-facing grid card — Fresh Picks, Farmer Profile's listings grid,
+// Search, and Categories all use this. Tapping anywhere on the card
+// (including the "+" affordance) opens the quick-view overlay.
+export function ProductCard({ name, unit, price, photoUrl, harvestDate, onPress }: Props) {
   const freshness = freshnessLabel(harvestDate);
 
   return (
-    <View style={styles.card}>
+    <Pressable
+      style={styles.card}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`View ${name}`}
+    >
       <View style={styles.imageWrap}>
         {photoUrl ? (
           <Image source={{ uri: photoUrl }} style={styles.image} />
@@ -47,17 +55,11 @@ export function ProductCard({ name, unit, price, photoUrl, harvestDate, onAddPre
 
       <View style={styles.footer}>
         <Text style={[typography.label, styles.price]}>{formatNaira(price)}</Text>
-        <Pressable
-          onPress={onAddPress}
-          style={styles.addButton}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel={`Add ${name} to cart`}
-        >
+        <View style={styles.addButton}>
           <FontAwesome5 name="plus" size={12} color={colors.surface} />
-        </Pressable>
+        </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { IntroAnimation } from '@/components/motion/IntroAnimation';
+import { resumeRouteForProfile } from '@/lib/authResume';
 import { useAuthStore } from '@/store/useAuthStore';
 import { colors } from '@/theme/tokens';
 
@@ -10,6 +11,9 @@ const MIN_DISPLAY_MS = 1200;
 
 export default function IntroScreen() {
   const initializing = useAuthStore((state) => state.initializing);
+  const session = useAuthStore((state) => state.session);
+  const profile = useAuthStore((state) => state.profile);
+  const loadingProfile = useAuthStore((state) => state.loadingProfile);
   const [minDurationElapsed, setMinDurationElapsed] = useState(false);
   const hasNavigated = useRef(false);
 
@@ -22,17 +26,38 @@ export default function IntroScreen() {
     return () => clearTimeout(timeout);
   }, []);
 
+  // The routing gate (build spec section 9, previously unbuilt — see
+  // app/index.tsx, still a thin redirect straight here). A session alone
+  // isn't enough to decide where to go: the profile itself (specifically
+  // its onboarding_step) determines whether this is a fully-onboarded
+  // returning user (-> Welcome Back), someone mid-signup (-> resume exactly
+  // where they left off), or a first-time visitor (-> Welcome). Waiting on
+  // loadingProfile too, not just initializing, matters — fetchProfile()
+  // runs async off the auth-state-change listener and isn't guaranteed to
+  // have resolved the instant a session first appears.
   useEffect(() => {
     if (hasNavigated.current || initializing || !minDurationElapsed) {
       return;
     }
+    if (session && loadingProfile) {
+      return;
+    }
+
     hasNavigated.current = true;
-    // TODO(phase 5): the routing gate decides whether intro is shown at all
-    // (only when there's no session — build spec section 9). Until that
-    // exists, intro always proceeds to welcome once the session check and
-    // the minimum display time have both resolved.
-    router.replace('/(onboarding)/welcome');
-  }, [initializing, minDurationElapsed]);
+
+    if (!session) {
+      router.replace('/(onboarding)/welcome');
+      return;
+    }
+    if (!profile) {
+      // Session exists but the profile fetch failed outright (not just
+      // still loading) — safest fallback is the plain welcome screen
+      // rather than a route that assumes profile data exists.
+      router.replace('/(onboarding)/welcome');
+      return;
+    }
+    router.replace(resumeRouteForProfile(profile));
+  }, [initializing, minDurationElapsed, session, profile, loadingProfile]);
 
   return (
     <View style={styles.container}>

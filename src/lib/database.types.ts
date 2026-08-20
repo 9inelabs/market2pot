@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.15"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       account_resolution_attempts: {
@@ -73,6 +48,7 @@ export type Database = {
           created_at: string
           id: string
           name_match_score: number
+          paystack_recipient_code: string | null
           profile_id: string
           resolved_account_name: string
           verification_status: string
@@ -84,6 +60,7 @@ export type Database = {
           created_at?: string
           id?: string
           name_match_score: number
+          paystack_recipient_code?: string | null
           profile_id: string
           resolved_account_name: string
           verification_status?: string
@@ -95,6 +72,7 @@ export type Database = {
           created_at?: string
           id?: string
           name_match_score?: number
+          paystack_recipient_code?: string | null
           profile_id?: string
           resolved_account_name?: string
           verification_status?: string
@@ -129,6 +107,94 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      cart_items: {
+        Row: {
+          created_at: string
+          household_id: string
+          id: string
+          product_id: string
+          quantity: number
+        }
+        Insert: {
+          created_at?: string
+          household_id: string
+          id?: string
+          product_id: string
+          quantity: number
+        }
+        Update: {
+          created_at?: string
+          household_id?: string
+          id?: string
+          product_id?: string
+          quantity?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cart_items_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cart_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "low_stock_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cart_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversations: {
+        Row: {
+          created_at: string
+          farmer_id: string
+          household_id: string
+          id: string
+          last_message_at: string
+          last_message_preview: string | null
+        }
+        Insert: {
+          created_at?: string
+          farmer_id: string
+          household_id: string
+          id?: string
+          last_message_at?: string
+          last_message_preview?: string | null
+        }
+        Update: {
+          created_at?: string
+          farmer_id?: string
+          household_id?: string
+          id?: string
+          last_message_at?: string
+          last_message_preview?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_farmer_id_fkey"
+            columns: ["farmer_id"]
+            isOneToOne: false
+            referencedRelation: "farmer_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       delivery_locations: {
         Row: {
@@ -170,6 +236,41 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: true
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      delivery_zones: {
+        Row: {
+          created_at: string
+          farmer_id: string
+          fee: number
+          id: string
+          is_active: boolean
+          zone_name: string
+        }
+        Insert: {
+          created_at?: string
+          farmer_id: string
+          fee?: number
+          id?: string
+          is_active?: boolean
+          zone_name: string
+        }
+        Update: {
+          created_at?: string
+          farmer_id?: string
+          fee?: number
+          id?: string
+          is_active?: boolean
+          zone_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_zones_farmer_id_fkey"
+            columns: ["farmer_id"]
+            isOneToOne: false
+            referencedRelation: "farmer_profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -221,23 +322,32 @@ export type Database = {
       farmer_profiles: {
         Row: {
           bio: string | null
+          business_hours: Json | null
           created_at: string
           farm_name: string
           id: string
+          is_open_now: boolean
+          photo_url: string | null
           profile_id: string
         }
         Insert: {
           bio?: string | null
+          business_hours?: Json | null
           created_at?: string
           farm_name: string
           id?: string
+          is_open_now?: boolean
+          photo_url?: string | null
           profile_id: string
         }
         Update: {
           bio?: string | null
+          business_hours?: Json | null
           created_at?: string
           farm_name?: string
           id?: string
+          is_open_now?: boolean
+          photo_url?: string | null
           profile_id?: string
         }
         Relationships: [
@@ -245,6 +355,105 @@ export type Database = {
             foreignKeyName: "farmer_profiles_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          attachment_type: string | null
+          attachment_url: string | null
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          read_at: string | null
+          reply_to_id: string | null
+          sender_id: string
+        }
+        Insert: {
+          attachment_type?: string | null
+          attachment_url?: string | null
+          content: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          read_at?: string | null
+          reply_to_id?: string | null
+          sender_id: string
+        }
+        Update: {
+          attachment_type?: string | null
+          attachment_url?: string | null
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          read_at?: string | null
+          reply_to_id?: string | null
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_reply_to_id_fkey"
+            columns: ["reply_to_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          is_read: boolean
+          profile_id: string
+          related_id: string | null
+          title: string
+          type: string
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          profile_id: string
+          related_id?: string | null
+          title: string
+          type: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          profile_id?: string
+          related_id?: string | null
+          title?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -290,6 +499,13 @@ export type Database = {
             foreignKeyName: "order_items_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
+            referencedRelation: "low_stock_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -300,11 +516,14 @@ export type Database = {
           completed_at: string | null
           created_at: string
           delivery_address: string | null
+          farmer_confirmed_at: string | null
           farmer_id: string
           fulfillment_type: string | null
+          household_confirmed_at: string | null
           household_id: string
           id: string
           payment_status: string
+          paystack_recipient_code: string | null
           paystack_reference: string | null
           status: string
           subtotal: number
@@ -314,11 +533,14 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           delivery_address?: string | null
+          farmer_confirmed_at?: string | null
           farmer_id: string
           fulfillment_type?: string | null
+          household_confirmed_at?: string | null
           household_id: string
           id?: string
           payment_status?: string
+          paystack_recipient_code?: string | null
           paystack_reference?: string | null
           status?: string
           subtotal?: number
@@ -328,11 +550,14 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           delivery_address?: string | null
+          farmer_confirmed_at?: string | null
           farmer_id?: string
           fulfillment_type?: string | null
+          household_confirmed_at?: string | null
           household_id?: string
           id?: string
           payment_status?: string
+          paystack_recipient_code?: string | null
           paystack_reference?: string | null
           status?: string
           subtotal?: number
@@ -355,16 +580,64 @@ export type Database = {
           },
         ]
       }
+      payouts: {
+        Row: {
+          amount: number
+          created_at: string
+          farmer_id: string
+          id: string
+          order_id: string
+          paystack_transfer_code: string | null
+          status: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          farmer_id: string
+          id?: string
+          order_id: string
+          paystack_transfer_code?: string | null
+          status?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          farmer_id?: string
+          id?: string
+          order_id?: string
+          paystack_transfer_code?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payouts_farmer_id_fkey"
+            columns: ["farmer_id"]
+            isOneToOne: false
+            referencedRelation: "farmer_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payouts_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           category: string
           created_at: string
+          description: string | null
           farmer_id: string
           harvest_date: string | null
           id: string
           is_available: boolean
+          is_preorder: boolean
+          low_stock_threshold: number | null
           name: string
-          photo_url: string | null
+          photo_urls: string[]
           price: number
           quantity_available: number
           unit: string
@@ -372,12 +645,15 @@ export type Database = {
         Insert: {
           category: string
           created_at?: string
+          description?: string | null
           farmer_id: string
           harvest_date?: string | null
           id?: string
           is_available?: boolean
+          is_preorder?: boolean
+          low_stock_threshold?: number | null
           name: string
-          photo_url?: string | null
+          photo_urls?: string[]
           price: number
           quantity_available?: number
           unit: string
@@ -385,12 +661,15 @@ export type Database = {
         Update: {
           category?: string
           created_at?: string
+          description?: string | null
           farmer_id?: string
           harvest_date?: string | null
           id?: string
           is_available?: boolean
+          is_preorder?: boolean
+          low_stock_threshold?: number | null
           name?: string
-          photo_url?: string | null
+          photo_urls?: string[]
           price?: number
           quantity_available?: number
           unit?: string
@@ -447,6 +726,148 @@ export type Database = {
         }
         Relationships: []
       }
+      promotions: {
+        Row: {
+          created_at: string
+          discount_percent: number
+          ends_at: string
+          id: string
+          is_active: boolean
+          product_id: string
+          starts_at: string
+        }
+        Insert: {
+          created_at?: string
+          discount_percent: number
+          ends_at: string
+          id?: string
+          is_active?: boolean
+          product_id: string
+          starts_at?: string
+        }
+        Update: {
+          created_at?: string
+          discount_percent?: number
+          ends_at?: string
+          id?: string
+          is_active?: boolean
+          product_id?: string
+          starts_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promotions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "low_stock_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "promotions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      refunds: {
+        Row: {
+          amount: number
+          created_at: string
+          household_id: string
+          id: string
+          order_id: string
+          paystack_transfer_code: string | null
+          status: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          household_id: string
+          id?: string
+          order_id: string
+          paystack_transfer_code?: string | null
+          status?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          household_id?: string
+          id?: string
+          order_id?: string
+          paystack_transfer_code?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "refunds_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refunds_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reviews: {
+        Row: {
+          comment: string | null
+          created_at: string
+          farmer_id: string
+          household_id: string
+          id: string
+          order_id: string
+          rating: number
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          farmer_id: string
+          household_id: string
+          id?: string
+          order_id: string
+          rating: number
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          farmer_id?: string
+          household_id?: string
+          id?: string
+          order_id?: string
+          rating?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviews_farmer_id_fkey"
+            columns: ["farmer_id"]
+            isOneToOne: false
+            referencedRelation: "farmer_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviews_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviews_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       farmer_verification: {
@@ -472,6 +893,62 @@ export type Database = {
           },
         ]
       }
+      low_stock_products: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          farmer_id: string | null
+          harvest_date: string | null
+          id: string | null
+          is_available: boolean | null
+          is_preorder: boolean | null
+          low_stock_threshold: number | null
+          name: string | null
+          photo_urls: string[] | null
+          price: number | null
+          quantity_available: number | null
+          unit: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          farmer_id?: string | null
+          harvest_date?: string | null
+          id?: string | null
+          is_available?: boolean | null
+          is_preorder?: boolean | null
+          low_stock_threshold?: number | null
+          name?: string | null
+          photo_urls?: string[] | null
+          price?: number | null
+          quantity_available?: number | null
+          unit?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          farmer_id?: string | null
+          harvest_date?: string | null
+          id?: string | null
+          is_available?: boolean | null
+          is_preorder?: boolean | null
+          low_stock_threshold?: number | null
+          name?: string | null
+          photo_urls?: string[] | null
+          price?: number | null
+          quantity_available?: number | null
+          unit?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_farmer_id_fkey"
+            columns: ["farmer_id"]
+            isOneToOne: false
+            referencedRelation: "farmer_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       [_ in never]: never
@@ -479,6 +956,7 @@ export type Database = {
     Enums: {
       onboarding_step:
         | "role_pending"
+        | "password_pending"
         | "identity_pending"
         | "location_pending"
         | "bank_pending"
@@ -610,13 +1088,11 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       onboarding_step: [
         "role_pending",
+        "password_pending",
         "identity_pending",
         "location_pending",
         "bank_pending",
@@ -627,3 +1103,4 @@ export const Constants = {
     },
   },
 } as const
+

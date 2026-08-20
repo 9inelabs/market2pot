@@ -5,17 +5,21 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'r
 import Animated, { Easing, FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CountBadge } from '@/components/app/CountBadge';
 import { EmptyState } from '@/components/app/EmptyState';
 import { FarmerCard } from '@/components/app/FarmerCard';
 import { ProductCard } from '@/components/app/ProductCard';
+import { ProductQuickViewModal } from '@/components/app/ProductQuickViewModal';
 import { SectionHeader } from '@/components/app/SectionHeader';
+import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import { shortLocationLabel, useDeliveryLocation } from '@/hooks/useDeliveryLocation';
 import { useFreshProducts, useProductCategories } from '@/hooks/useFreshProducts';
 import { useNearbyFarmers } from '@/hooks/useNearbyFarmers';
+import { useProductQuickView } from '@/hooks/useProductQuickView';
+import { useUnreadNotificationCount } from '@/hooks/useUnreadNotificationCount';
 import { strings } from '@/i18n/strings';
 import { timeOfDayGreeting } from '@/lib/greeting';
 import { useAuthStore } from '@/store/useAuthStore';
-import { useCartStore } from '@/store/useCartStore';
 import { colors, geometry, spacing, withOpacity } from '@/theme/tokens';
 import { typography } from '@/theme/typography';
 
@@ -23,8 +27,9 @@ export function HouseholdHome() {
   const profile = useAuthStore((state) => state.profile);
   const farmerProfile = useAuthStore((state) => state.farmerProfile);
   const fetchProfile = useAuthStore((state) => state.fetchProfile);
-  const itemCount = useCartStore((state) => state.itemCount);
-  const addItem = useCartStore((state) => state.addItem);
+  const { cart, selectedProduct, open, close, viewFull } = useProductQuickView();
+  const itemCount = cart.itemCount;
+  const unreadNotifications = useUnreadNotificationCount();
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const { location, loading: locationLoading, refresh: refreshLocation } = useDeliveryLocation();
@@ -40,12 +45,19 @@ export function HouseholdHome() {
     refresh: refreshProducts,
   } = useFreshProducts({ category: selectedCategory });
 
+  const refreshAll = async () => {
+    await Promise.all([refreshLocation(), refreshFarmers(), refreshProducts(), fetchProfile()]);
+  };
+
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refreshLocation(), refreshFarmers(), refreshProducts(), fetchProfile()]);
+    await refreshAll();
     setRefreshing(false);
   };
+  // Silent background refresh (no spinner) on focus + a 20s interval;
+  // onRefresh above (with the spinner) stays reserved for manual pull.
+  useAutoRefresh(refreshAll);
 
   const productRows = useMemo(() => {
     const rows: (typeof products)[] = [];
@@ -82,6 +94,7 @@ export function HouseholdHome() {
                 accessibilityLabel={strings.homeNotificationsLabel}
               >
                 <FontAwesome5 name="bell" size={16} color={colors.textPrimary} />
+                <CountBadge count={unreadNotifications} />
               </Pressable>
               <Pressable
                 onPress={() => router.push('/(app)/cart')}
@@ -214,9 +227,9 @@ export function HouseholdHome() {
                         name={product.name}
                         unit={product.unit}
                         price={product.price}
-                        photoUrl={product.photo_url}
+                        photoUrl={product.photo_urls[0] ?? null}
                         harvestDate={product.harvest_date}
-                        onAddPress={addItem}
+                        onPress={() => open(product)}
                       />
                     ))}
                     {row.length === 1 ? <View style={styles.productSpacer} /> : null}
@@ -227,6 +240,14 @@ export function HouseholdHome() {
           </View>
         </Animated.View>
       </ScrollView>
+
+      <ProductQuickViewModal
+        visible={!!selectedProduct}
+        product={selectedProduct}
+        onClose={close}
+        onAddToCart={cart.addItem}
+        onViewFull={viewFull}
+      />
     </SafeAreaView>
   );
 }
@@ -332,6 +353,8 @@ const styles = StyleSheet.create({
     padding: spacing[16],
     borderRadius: 18,
     backgroundColor: withOpacity(colors.terracotta, 0.14),
+    borderWidth: 0.5,
+    borderColor: colors.terracotta,
   },
   bannerIconWrap: {
     width: 40,

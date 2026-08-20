@@ -14,6 +14,7 @@ import { colors, spacing } from '@/theme/tokens';
 import { typography } from '@/theme/typography';
 
 type UserRole = Database['public']['Enums']['user_role'];
+type Mode = 'signup' | 'reset';
 
 const OTP_LENGTH = 6;
 const DEV_BYPASS_CODE = '000000';
@@ -23,24 +24,34 @@ function maskPhone(phone: string): string {
 }
 
 export default function VerifyScreen() {
-  const { mode, role, phone } = useLocalSearchParams<{
+  const { mode: modeParam, role, phone } = useLocalSearchParams<{
     mode?: string;
     role?: UserRole;
     phone: string;
   }>();
-  const isSignup = mode !== 'login';
+  const mode: Mode = modeParam === 'reset' ? 'reset' : 'signup';
+  const isSignup = mode === 'signup';
   const cooldown = useCooldown(60);
   const [code, setCode] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Throws rather than silently returning on failure — handleComplete's
-  // try/catch below is what turns that into a visible error instead of a
+  // Signup only: assigns the role chosen pre-auth (role.tsx) and moves the
+  // step machine to 'password_pending' — the new first stop after
+  // verification, before any of the rest of onboarding. Returns the route
+  // to send the user to next rather than assuming set-password, because a
+  // phone that turns out to already belong to a *completed* account (the
+  // existing-account dialog in phone.tsx was skipped/dismissed, or its
+  // check silently failed) must NOT have its role/step overwritten here —
+  // that would corrupt a finished account back into onboarding. Throws
+  // rather than silently returning on failure — handleComplete's try/catch
+  // below is what turns that into a visible error instead of a
   // permanently stuck "verifying" button.
-  const applyRoleAndAdvance = async () => {
-    if (!isSignup || !role) {
-      return;
+  const resolveRouteAfterVerify = async () => {
+    if (!isSignup) {
+      return { pathname: '/(profile)/set-password', params: { mode: 'reset' } };
     }
+
     const {
       data: { user },
       error: userError,
@@ -48,25 +59,30 @@ export default function VerifyScreen() {
     if (userError || !user) {
       throw new Error(userError?.message ?? 'Your session expired — sign in again.');
     }
-    const { error } = await supabase
-      .from('profiles')
-      .update({ role, step: 'identity_pending', active_view: role === 'farmer' ? 'farmer' : 'household' })
-      .eq('id', user.id);
-    if (error) {
-      throw error;
-    }
-  };
 
-  const routeAfterSuccess = () => {
-    // Both roles land on the same shared identity-name screen next — it
-    // reads role from the auth store itself to decide what to show
-    // (farmers get a DOB field) and where to go after (farm-location vs.
-    // consumer-location, several steps later).
-    if (isSignup && (role === 'farmer' || role === 'consumer')) {
-      router.replace('/(profile)/identity-name');
-    } else {
-      router.replace('/(app)');
+    const { data: existingProfile, error: profileError } = await supabase
+      .from('profiles')
+      .select('step')
+      .eq('id', user.id)
+      .single();
+    if (profileError) {
+      throw profileError;
     }
+
+    if (existingProfile.step === 'complete') {
+      return { pathname: '/(onboarding)/welcome-back', params: undefined };
+    }
+
+    if (role) {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ role, step: 'password_pending', active_view: role === 'farmer' ? 'farmer' : 'household' })
+        .eq('id', user.id);
+      if (error) {
+        throw error;
+      }
+    }
+    return { pathname: '/(profile)/set-password', params: { mode: 'signup' } };
   };
 
   const handleComplete = async (submittedCode: string) => {
@@ -78,11 +94,8 @@ export default function VerifyScreen() {
 
     try {
       if (DEV_OTP_BYPASS && submittedCode === DEV_BYPASS_CODE) {
-        // Dev-only path — no network call, gated on __DEV__ (see
-        // src/config/features.ts) so this can never be reached in a
-        // release build regardless of how EXPO_PUBLIC_SMS_ENABLED is set.
-        await applyRoleAndAdvance();
-        routeAfterSuccess();
+        const target = await resolveRouteAfterVerify();
+        router.replace(target.params ? { pathname: target.pathname, params: target.params } : target.pathname);
         return;
       }
 
@@ -99,13 +112,9 @@ export default function VerifyScreen() {
         return;
       }
 
-      await applyRoleAndAdvance();
-      routeAfterSuccess();
+      const target = await resolveRouteAfterVerify();
+      router.replace(target.params ? { pathname: target.pathname, params: target.params } : target.pathname);
     } catch (err) {
-      // Without this, applyRoleAndAdvance throwing would leave `verifying`
-      // stuck true forever — the button would look disabled and do
-      // nothing, with no feedback at all (this is the bug that made the
-      // consumer-identity screen's Continue button appear dead).
       setError(err instanceof Error ? err.message : 'Something went wrong. Try again.');
     } finally {
       setVerifying(false);

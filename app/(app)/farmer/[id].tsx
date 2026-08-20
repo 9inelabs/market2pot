@@ -6,15 +6,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState } from '@/components/app/EmptyState';
 import { ProductCard } from '@/components/app/ProductCard';
+import { ProductQuickViewModal } from '@/components/app/ProductQuickViewModal';
 import { SectionHeader } from '@/components/app/SectionHeader';
-import { LeafMark } from '@/components/brand/LeafMark';
 import { AvatarPicker } from '@/components/ui/AvatarPicker';
 import { Button } from '@/components/ui/Button';
 import { useFarmerDetail } from '@/hooks/useFarmerDetail';
 import { useFreshProducts } from '@/hooks/useFreshProducts';
+import { useProductQuickView } from '@/hooks/useProductQuickView';
 import { strings } from '@/i18n/strings';
+import { findOrCreateConversation } from '@/lib/conversations';
 import { getInitials } from '@/lib/initials';
-import { useCartStore } from '@/store/useCartStore';
 import { colors, geometry, spacing } from '@/theme/tokens';
 import { typography } from '@/theme/typography';
 
@@ -22,8 +23,19 @@ export default function FarmerProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { farmer, loading } = useFarmerDetail(id);
   const { products, loading: productsLoading } = useFreshProducts({ farmerId: id });
-  const addItem = useCartStore((state) => state.addItem);
+  const { cart, selectedProduct, open, close, viewFull } = useProductQuickView();
   const [saved, setSaved] = useState(false);
+  const [messaging, setMessaging] = useState(false);
+
+  const handleMessage = async () => {
+    if (!farmer || messaging) return;
+    setMessaging(true);
+    const conversationId = await findOrCreateConversation(farmer.id);
+    setMessaging(false);
+    if (conversationId) {
+      router.push(`/(app)/message/${conversationId}`);
+    }
+  };
 
   const productRows = useMemo(() => {
     const rows: (typeof products)[] = [];
@@ -59,18 +71,22 @@ export default function FarmerProfileScreen() {
 
             <View style={styles.nameRow}>
               <Text style={[typography.button, styles.name]}>{farmer.fullName}</Text>
-              <LeafMark width={13} height={14} />
+              <FontAwesome5 name="check-circle" size={18} color={colors.harvestGreen} solid />
             </View>
             <Text style={styles.verified}>Verified farmer</Text>
             {farmer.locationLine ? (
-              <Text style={[typography.caption, styles.location]}>{farmer.locationLine}</Text>
+              <View style={styles.locationRow}>
+                <FontAwesome5 name="map-marker-alt" size={12} color={colors.harvestGreen} />
+                <Text style={[typography.caption, styles.location]}>{farmer.locationLine}</Text>
+              </View>
             ) : null}
 
             <View style={styles.actionsRow}>
               <Button
                 label={strings.farmerProfileMessage}
                 icon="comment-dots"
-                onPress={() => router.push('/(app)/(tabs)/messages')}
+                onPress={handleMessage}
+                loading={messaging}
                 style={styles.messageButton}
               />
               <Pressable
@@ -114,9 +130,9 @@ export default function FarmerProfileScreen() {
                         name={product.name}
                         unit={product.unit}
                         price={product.price}
-                        photoUrl={product.photo_url}
+                        photoUrl={product.photo_urls[0] ?? null}
                         harvestDate={product.harvest_date}
-                        onAddPress={addItem}
+                        onPress={() => open(product)}
                       />
                     ))}
                     {row.length === 1 ? <View style={styles.productSpacer} /> : null}
@@ -136,6 +152,14 @@ export default function FarmerProfileScreen() {
           </View>
         </ScrollView>
       )}
+
+      <ProductQuickViewModal
+        visible={!!selectedProduct}
+        product={selectedProduct}
+        onClose={close}
+        onAddToCart={cart.addItem}
+        onViewFull={viewFull}
+      />
     </SafeAreaView>
   );
 }
@@ -181,9 +205,14 @@ const styles = StyleSheet.create({
     color: colors.goldenWheatText,
     marginTop: 2,
   },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[4],
+    marginTop: spacing[4],
+  },
   location: {
-    color: colors.textMuted,
-    marginTop: 2,
+    color: colors.textPrimary,
   },
   actionsRow: {
     flexDirection: 'row',

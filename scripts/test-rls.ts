@@ -226,6 +226,53 @@ async function seedOrderItem(orderId: string): Promise<string> {
   return data.id;
 }
 
+async function seedPromotion(productId: string, discountPercent: number): Promise<string> {
+  const { data, error } = await admin
+    .from('promotions')
+    .insert({
+      product_id: productId,
+      discount_percent: discountPercent,
+      ends_at: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+    })
+    .select('id')
+    .single();
+  if (error || !data) {
+    throw new Error(`Failed to seed promotions for product ${productId}: ${error?.message}`);
+  }
+  return data.id;
+}
+
+async function deleteRowById(table: 'promotions' | 'delivery_zones', id: string): Promise<void> {
+  const { error } = await admin.from(table).delete().eq('id', id);
+  if (error) {
+    console.error(`Warning: failed to delete test ${table} row ${id}: ${error.message}`);
+  }
+}
+
+async function seedPayout(orderId: string, farmerId: string, amount: number): Promise<string> {
+  const { data, error } = await admin
+    .from('payouts')
+    .insert({ order_id: orderId, farmer_id: farmerId, amount })
+    .select('id')
+    .single();
+  if (error || !data) {
+    throw new Error(`Failed to seed payouts for order ${orderId}: ${error?.message}`);
+  }
+  return data.id;
+}
+
+async function seedRefund(orderId: string, householdId: string, amount: number): Promise<string> {
+  const { data, error } = await admin
+    .from('refunds')
+    .insert({ order_id: orderId, household_id: householdId, amount })
+    .select('id')
+    .single();
+  if (error || !data) {
+    throw new Error(`Failed to seed refunds for order ${orderId}: ${error?.message}`);
+  }
+  return data.id;
+}
+
 function assertZeroRows(
   label: string,
   rows: unknown[] | null,
@@ -258,9 +305,10 @@ function assertRejected(label: string, error: PostgrestError | null): void {
 }
 
 async function main() {
-  console.log('Creating two throwaway users (user A, user B)...');
+  console.log('Creating three throwaway users (user A, user B, user C — C has no relationship to anyone)...');
   const userA = await createTestUser('a');
   const userB = await createTestUser('b');
+  const userC = await createTestUser('c');
   const testBankCode = `RLS${randomSuffix()}`;
 
   try {
@@ -290,11 +338,33 @@ async function main() {
     console.log('Signing in as user A...');
     const clientA = await signInAsClient(userA);
 
+    // --- profiles: relationship-scoped read (fixed a real bug — see
+    // 20260822090000_profiles_select_related_household.sql) -----------------
+    // orderBFromA (household B, farmer A) already exists at this point, so
+    // user A — as the farmer on that order — now legitimately CAN read user
+    // B's profile row (this used to silently return null in every
+    // household:profiles(...) embed useFarmerOrders/useOrderDetail/
+    // useConversations/the chat thread rely on, showing "Household"/
+    // "Unknown" instead of a real name). User C has no order or conversation
+    // with anyone, so the same read must still fail for them.
+    console.log("\nChecking profiles table (relationship-scoped read, not blanket cross-user)...");
+
+    const selProfileRelated = await clientA.from('profiles').select('*').eq('id', userB.id);
+    assertOneRow(
+      'profiles SELECT (user A reading user B — a real order relationship exists)',
+      selProfileRelated.data,
+      selProfileRelated.error
+    );
+
+    const selProfileUnrelated = await clientA.from('profiles').select('*').eq('id', userC.id);
+    assertZeroRows(
+      'profiles SELECT (user A reading user C — no relationship exists)',
+      selProfileUnrelated.data,
+      selProfileUnrelated.error
+    );
+
     // --- Cross-user reads: expect 0 rows -----------------------------------
     console.log("\nAttempting to READ user B's rows as user A (expecting 0 rows each)...");
-
-    const selProfile = await clientA.from('profiles').select('*').eq('id', userB.id);
-    assertZeroRows('profiles SELECT (cross-user)', selProfile.data, selProfile.error);
 
     const selFarm = await clientA.from('farm_locations').select('*').eq('profile_id', userB.id);
     assertZeroRows('farm_locations SELECT (cross-user)', selFarm.data, selFarm.error);
@@ -627,11 +697,17 @@ async function main() {
     const orderUnrelated = await clientA.from('orders').select('*').eq('id', orderBFromB);
     assertZeroRows('orders SELECT (unrelated to user A entirely)', orderUnrelated.data, orderUnrelated.error);
 
+    // Consumer-side build: orders_insert_household was dropped entirely
+    // (20260821090200_orders_escrow.sql) — order creation now only happens
+    // server-side via the initialize-checkout Edge Function, since pricing
+    // math can't be trusted from a client-supplied INSERT payload once a
+    // real payment is calculated from it. A direct client insert must be
+    // rejected even for the household's own would-be order.
     const orderInsertOwnHousehold = await clientA
       .from('orders')
       .insert({ household_id: userA.id, farmer_id: farmerProfileB })
       .select();
-    assertOneRow('orders INSERT (own household)', orderInsertOwnHousehold.data, orderInsertOwnHousehold.error);
+    assertRejected('orders INSERT (client-side, even for own household — must go through initialize-checkout)', orderInsertOwnHousehold.error);
 
     const orderInsertCrossHousehold = await clientA
       .from('orders')
@@ -639,24 +715,58 @@ async function main() {
       .select();
     assertRejected('orders INSERT (claiming to be household B)', orderInsertCrossHousehold.error);
 
+    // orders_update_household was dropped too — a household has no
+    // legitimate direct-UPDATE need on orders any more (escrow-sensitive
+    // transitions all go through Edge Functions using the service role).
+    // Unlike INSERT with no matching policy (a hard error), UPDATE with no
+    // matching row just silently affects 0 rows — same pattern the existing
+    // "banks UPDATE (no policy for authenticated users)" assertion below
+    // already documents for this project.
     const orderUpdateOwnHousehold = await clientA
       .from('orders')
-      .update({ status: 'confirmed' })
+      .update({ status: 'preparing' })
       .eq('id', orderAFromB)
       .select();
-    assertOneRow('orders UPDATE (own household order)', orderUpdateOwnHousehold.data, orderUpdateOwnHousehold.error);
+    assertZeroRows(
+      'orders UPDATE (household, even on their own order — must go through an Edge Function now)',
+      orderUpdateOwnHousehold.data,
+      orderUpdateOwnHousehold.error
+    );
 
-    // Farmer has SELECT but no UPDATE policy — user A is the farmer on this
-    // order, not the household, so this must be rejected/filtered out.
-    const orderUpdateAsFarmerOnly = await clientA
+    // Farmer-side build: the farmer now HAS an update policy
+    // (orders_update_farmer_advance_only), but its `with check` blocks
+    // setting status to 'delivered' — that's reserved for the household's
+    // own confirmation. User A is the farmer (not household) on orderBFromA.
+    const orderUpdateAsFarmerAdvance = await clientA
       .from('orders')
-      .update({ status: 'confirmed' })
+      .update({ status: 'preparing' })
       .eq('id', orderBFromA)
       .select();
+    assertOneRow(
+      'orders UPDATE (farmer advancing their own order to a non-delivered status)',
+      orderUpdateAsFarmerAdvance.data,
+      orderUpdateAsFarmerAdvance.error
+    );
+
+    const orderUpdateAsFarmerToDelivered = await clientA
+      .from('orders')
+      .update({ status: 'delivered' })
+      .eq('id', orderBFromA)
+      .select();
+    assertRejected(
+      'orders UPDATE (farmer attempting to set status to delivered — must be blocked)',
+      orderUpdateAsFarmerToDelivered.error
+    );
+
+    const orderUpdateUnrelated = await clientA
+      .from('orders')
+      .update({ status: 'preparing' })
+      .eq('id', orderBFromB)
+      .select();
     assertZeroRows(
-      'orders UPDATE (user A is only the farmer, not the household)',
-      orderUpdateAsFarmerOnly.data,
-      orderUpdateAsFarmerOnly.error
+      'orders UPDATE (user A is neither household nor farmer on this order)',
+      orderUpdateUnrelated.data,
+      orderUpdateUnrelated.error
     );
 
     // --- order_items: access follows the parent order's ownership ---------
@@ -678,6 +788,9 @@ async function main() {
       orderItemsUnrelatedOrder.error
     );
 
+    // order_items_insert_via_own_order was dropped too — pricing
+    // (unit_price/line_total) is server-computed now, same reasoning as
+    // orders_insert_household above.
     const orderItemInsertOwnOrder = await clientA
       .from('order_items')
       .insert({
@@ -688,9 +801,8 @@ async function main() {
         line_total: 500,
       })
       .select();
-    assertOneRow(
-      'order_items INSERT (own order)',
-      orderItemInsertOwnOrder.data,
+    assertRejected(
+      'order_items INSERT (client-side, even for own order — must go through initialize-checkout)',
       orderItemInsertOwnOrder.error
     );
 
@@ -732,6 +844,256 @@ async function main() {
       bankAccountsCrossReadDirect.error
     );
 
+    // --- low_stock_products: security_invoker view over products ----------
+    console.log('\nChecking low_stock_products view (security_invoker — RLS still applies)...');
+
+    const { error: lowStockUpdateError } = await admin
+      .from('products')
+      .update({ low_stock_threshold: 5, quantity_available: 2 })
+      .eq('id', productAAvailable);
+    if (lowStockUpdateError) {
+      throw new Error(`Failed to set up low-stock product: ${lowStockUpdateError.message}`);
+    }
+
+    const lowStockOwnRead = await clientA
+      .from('low_stock_products')
+      .select('*')
+      .eq('id', productAAvailable);
+    assertOneRow(
+      'low_stock_products SELECT (own product, crosses threshold)',
+      lowStockOwnRead.data,
+      lowStockOwnRead.error
+    );
+
+    // --- promotions: public read, farmer-only write on their own products -
+    console.log('\nChecking promotions table (public read, farmer-only write)...');
+
+    const promotionOwn = await seedPromotion(productAAvailable, 20);
+
+    const promotionCrossReadInsert = await clientA
+      .from('promotions')
+      .insert({
+        product_id: productBAvailable,
+        discount_percent: 10,
+        ends_at: new Date(Date.now() + 86_400_000).toISOString(),
+      })
+      .select();
+    assertRejected(
+      'promotions INSERT (on a product belonging to farmer B)',
+      promotionCrossReadInsert.error
+    );
+
+    const promotionSelectCross = await clientA.from('promotions').select('*').eq('id', promotionOwn);
+    assertOneRow('promotions SELECT (public read, any user)', promotionSelectCross.data, promotionSelectCross.error);
+
+    const promotionCrossUpdate = await clientA
+      .from('promotions')
+      .update({ discount_percent: 99 })
+      .eq('id', promotionOwn)
+      .select();
+    assertOneRow('promotions UPDATE (own product)', promotionCrossUpdate.data, promotionCrossUpdate.error);
+
+    await deleteRowById('promotions', promotionOwn);
+
+    // --- delivery_zones: public read, farmer-only write --------------------
+    console.log('\nChecking delivery_zones table (public read, farmer-only write)...');
+
+    const zoneInsertOwn = await clientA
+      .from('delivery_zones')
+      .insert({ farmer_id: farmerProfileA, zone_name: 'Test Zone', fee: 500 })
+      .select()
+      .single();
+    if (zoneInsertOwn.error || !zoneInsertOwn.data) {
+      throw new Error(`delivery_zones INSERT (own farmer) failed: ${zoneInsertOwn.error?.message}`);
+    }
+    console.log('PASS  delivery_zones INSERT (own farmer): 1 row affected, as expected for an own-row operation');
+
+    const zoneInsertCross = await clientA
+      .from('delivery_zones')
+      .insert({ farmer_id: farmerProfileB, zone_name: 'Hijack Zone', fee: 0 })
+      .select();
+    assertRejected('delivery_zones INSERT (claiming farmer B)', zoneInsertCross.error);
+
+    const zoneDeleteOwn = await clientA
+      .from('delivery_zones')
+      .delete()
+      .eq('id', zoneInsertOwn.data.id)
+      .select();
+    assertOneRow('delivery_zones DELETE (own row)', zoneDeleteOwn.data, zoneDeleteOwn.error);
+
+    // --- reviews: household-only insert tied to a real own order, public
+    // read, no update/delete -------------------------------------------
+    console.log('\nChecking reviews table (household-insert-own-order, public read)...');
+
+    const reviewOwnOrder = await clientA
+      .from('reviews')
+      .insert({ order_id: orderAFromB, farmer_id: farmerProfileB, household_id: userA.id, rating: 5 })
+      .select()
+      .single();
+    if (reviewOwnOrder.error || !reviewOwnOrder.data) {
+      throw new Error(`reviews INSERT (own order) failed: ${reviewOwnOrder.error?.message}`);
+    }
+    console.log('PASS  reviews INSERT (own order): 1 row affected, as expected for an own-row operation');
+
+    const reviewClaimingOtherHousehold = await clientA
+      .from('reviews')
+      .insert({ order_id: orderBFromB, farmer_id: farmerProfileB, household_id: userB.id, rating: 1 })
+      .select();
+    assertRejected('reviews INSERT (claiming to be household B)', reviewClaimingOtherHousehold.error);
+
+    const reviewPublicRead = await clientA
+      .from('reviews')
+      .select('*')
+      .eq('id', reviewOwnOrder.data.id);
+    assertOneRow('reviews SELECT (public read)', reviewPublicRead.data, reviewPublicRead.error);
+
+    // --- notifications: new_review/new_message triggers fire, and are only
+    // readable by their owner ----------------------------------------------
+    // Consumer-side build: notify_farmer_new_order (fired on orders INSERT)
+    // was deliberately dropped in 20260821090600_notifications_escrow_types.sql
+    // — an order row now exists before it's ever paid for (initialize-
+    // checkout creates it, then Paystack is called), so notifying on raw
+    // INSERT would fire for abandoned/never-completed checkouts. The
+    // paystack-webhook Edge Function inserts 'order_paid' once payment is
+    // actually confirmed instead — not exercised here, since it requires a
+    // real Paystack webhook call.
+    console.log('\nChecking notifications table (trigger fan-out + owner-only read)...');
+
+    const notificationsForFarmerB = await admin
+      .from('notifications')
+      .select('type')
+      .eq('profile_id', userB.id);
+    const notificationTypes = (notificationsForFarmerB.data ?? []).map((n) => n.type);
+    if (!notificationTypes.includes('new_review')) {
+      throw new Error(
+        `Expected a 'new_review' notification for farmer B after the review above, got: ${notificationTypes.join(', ')}`
+      );
+    }
+    console.log("PASS  notifications: 'new_review' trigger fired for farmer B");
+
+    const notificationsCrossRead = await clientA
+      .from('notifications')
+      .select('*')
+      .eq('profile_id', userB.id);
+    assertZeroRows(
+      'notifications SELECT (cross-user — user A cannot read user B notifications)',
+      notificationsCrossRead.data,
+      notificationsCrossRead.error
+    );
+
+    // --- conversations + messages: participant-only, sender-only insert ---
+    console.log('\nChecking conversations/messages tables (participant-only access)...');
+
+    const conversationOwn = await clientA
+      .from('conversations')
+      .insert({ farmer_id: farmerProfileB, household_id: userA.id })
+      .select()
+      .single();
+    if (conversationOwn.error || !conversationOwn.data) {
+      throw new Error(`conversations INSERT (own, as household) failed: ${conversationOwn.error?.message}`);
+    }
+    console.log('PASS  conversations INSERT (own, as household): 1 row affected');
+
+    const messageOwnSend = await clientA
+      .from('messages')
+      .insert({ conversation_id: conversationOwn.data.id, sender_id: userA.id, content: 'Hello farmer B' })
+      .select();
+    assertOneRow('messages INSERT (own, as sender)', messageOwnSend.data, messageOwnSend.error);
+
+    const messageImpersonate = await clientA
+      .from('messages')
+      .insert({ conversation_id: conversationOwn.data.id, sender_id: userB.id, content: 'Impersonating B' })
+      .select();
+    assertRejected('messages INSERT (sender_id set to user B)', messageImpersonate.error);
+
+    const conversationBRead = await clientA
+      .from('conversations')
+      .select('*')
+      .eq('household_id', userB.id)
+      .eq('farmer_id', farmerProfileA);
+    // No such conversation was ever created, so this is really just
+    // confirming the SELECT policy doesn't error for a non-participant
+    // query shape — the meaningful cross-user check is messages below,
+    // scoped via a conversation user A has no part in.
+    assertZeroRows(
+      'conversations SELECT (no matching conversation exists)',
+      conversationBRead.data,
+      conversationBRead.error
+    );
+
+    await admin.from('messages').delete().eq('conversation_id', conversationOwn.data.id);
+    await admin.from('conversations').delete().eq('id', conversationOwn.data.id);
+
+    // --- cart_items: owner-only, all operations ----------------------------
+    console.log('\nChecking cart_items table (owner-only, all operations)...');
+
+    const cartInsertOwn = await clientA
+      .from('cart_items')
+      .insert({ household_id: userA.id, product_id: productBAvailable, quantity: 2 })
+      .select()
+      .single();
+    if (cartInsertOwn.error || !cartInsertOwn.data) {
+      throw new Error(`cart_items INSERT (own) failed: ${cartInsertOwn.error?.message}`);
+    }
+    console.log('PASS  cart_items INSERT (own): 1 row affected, as expected for an own-row operation');
+
+    const cartInsertCrossHousehold = await clientA
+      .from('cart_items')
+      .insert({ household_id: userB.id, product_id: productBAvailable, quantity: 1 })
+      .select();
+    assertRejected('cart_items INSERT (claiming to be household B)', cartInsertCrossHousehold.error);
+
+    const cartSelectCross = await clientA.from('cart_items').select('*').eq('household_id', userB.id);
+    assertZeroRows('cart_items SELECT (cross-user)', cartSelectCross.data, cartSelectCross.error);
+
+    const cartUpdateOwn = await clientA
+      .from('cart_items')
+      .update({ quantity: 5 })
+      .eq('id', cartInsertOwn.data.id)
+      .select();
+    assertOneRow('cart_items UPDATE (own)', cartUpdateOwn.data, cartUpdateOwn.error);
+
+    const cartDeleteOwn = await clientA.from('cart_items').delete().eq('id', cartInsertOwn.data.id).select();
+    assertOneRow('cart_items DELETE (own)', cartDeleteOwn.data, cartDeleteOwn.error);
+
+    // --- payouts / refunds: read-only for their respective owner, no
+    // client write policy at all (only Edge Functions using the service
+    // role write these) ---------------------------------------------------
+    console.log('\nChecking payouts/refunds tables (owner-read-only, service-role-only write)...');
+
+    const payoutForFarmerA = await seedPayout(orderBFromA, farmerProfileA, 1000);
+    const payoutForFarmerB = await seedPayout(orderAFromB, farmerProfileB, 2000);
+
+    const payoutReadOwn = await clientA.from('payouts').select('*').eq('id', payoutForFarmerA);
+    assertOneRow('payouts SELECT (own farmer)', payoutReadOwn.data, payoutReadOwn.error);
+
+    const payoutReadCross = await clientA.from('payouts').select('*').eq('id', payoutForFarmerB);
+    assertZeroRows('payouts SELECT (different farmer)', payoutReadCross.data, payoutReadCross.error);
+
+    const payoutClientInsert = await clientA
+      .from('payouts')
+      .insert({ order_id: orderBFromA, farmer_id: farmerProfileA, amount: 500 })
+      .select();
+    assertRejected('payouts INSERT (no client policy — service role only)', payoutClientInsert.error);
+
+    const refundForHouseholdA = await seedRefund(orderAFromB, userA.id, 1500);
+    const refundForHouseholdB = await seedRefund(orderBFromB, userB.id, 1500);
+
+    const refundReadOwn = await clientA.from('refunds').select('*').eq('id', refundForHouseholdA);
+    assertOneRow('refunds SELECT (own household)', refundReadOwn.data, refundReadOwn.error);
+
+    const refundReadCross = await clientA.from('refunds').select('*').eq('id', refundForHouseholdB);
+    assertZeroRows('refunds SELECT (different household)', refundReadCross.data, refundReadCross.error);
+
+    const refundClientInsert = await clientA
+      .from('refunds')
+      .insert({ order_id: orderAFromB, household_id: userA.id, amount: 500 })
+      .select();
+    assertRejected('refunds INSERT (no client policy — service role only)', refundClientInsert.error);
+
+    await admin.from('payouts').delete().in('id', [payoutForFarmerA, payoutForFarmerB]);
+    await admin.from('refunds').delete().in('id', [refundForHouseholdA, refundForHouseholdB]);
+
     console.log('\nAll RLS checks passed.');
   } finally {
     console.log('\nCleaning up test users...');
@@ -739,6 +1101,7 @@ async function main() {
     await deleteBankRow(`${testBankCode}-X`);
     await deleteTestUser(userA);
     await deleteTestUser(userB);
+    await deleteTestUser(userC);
   }
 }
 

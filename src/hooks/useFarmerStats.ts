@@ -45,6 +45,7 @@ export function useFarmerStats(farmerProfileId: string | undefined) {
         .from('orders')
         .select('total')
         .eq('farmer_id', farmerProfileId)
+        .neq('status', 'cancelled')
         .gte('created_at', startOfWeek.toISOString()),
     ]);
 

@@ -14,6 +14,7 @@ type Props = {
   onChange: (date: Date) => void;
   placeholder: string;
   maximumDate?: Date;
+  minimumDate?: Date;
 };
 
 function formatDate(date: Date): string {
@@ -22,13 +23,13 @@ function formatDate(date: Date): string {
 
 // Native picker, never free text — build spec section 7.6: "native date
 // picker, never free text. Enforce 18+ via maximumDate."
-export function DateField({ value, onChange, placeholder, maximumDate }: Props) {
+export function DateField({ value, onChange, placeholder, maximumDate, minimumDate }: Props) {
   const [showPicker, setShowPicker] = useState(false);
   // iOS's inline picker has no built-in dismiss affordance — track a draft
   // value so "Done" commits it, rather than every scroll tick firing
   // onChange immediately (which is fine on Android, where the dialog
   // dismisses itself on selection).
-  const [draft, setDraft] = useState<Date>(value ?? maximumDate ?? new Date());
+  const [draft, setDraft] = useState<Date>(value ?? minimumDate ?? maximumDate ?? new Date());
 
   const handleChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
     if (Platform.OS === 'android') {
@@ -58,6 +59,7 @@ export function DateField({ value, onChange, placeholder, maximumDate }: Props) 
             mode="date"
             display="spinner"
             maximumDate={maximumDate}
+            minimumDate={minimumDate}
             onChange={handleChange}
           />
           <Button
@@ -72,10 +74,11 @@ export function DateField({ value, onChange, placeholder, maximumDate }: Props) 
 
       {showPicker && Platform.OS === 'android' ? (
         <DateTimePicker
-          value={value ?? maximumDate ?? new Date()}
+          value={value ?? minimumDate ?? maximumDate ?? new Date()}
           mode="date"
           display="default"
           maximumDate={maximumDate}
+          minimumDate={minimumDate}
           onChange={handleChange}
         />
       ) : null}

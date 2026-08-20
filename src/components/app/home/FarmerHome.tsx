@@ -5,18 +5,25 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'r
 import Animated, { Easing, FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CountBadge } from '@/components/app/CountBadge';
 import { EmptyState } from '@/components/app/EmptyState';
-import { ListingRow } from '@/components/app/ListingRow';
-import { QuickAccessItem } from '@/components/app/QuickAccessItem';
+import { OrderPreviewRow } from '@/components/app/OrderPreviewRow';
+import { QuickActionGrid, type QuickAction } from '@/components/app/QuickActionGrid';
 import { SectionHeader } from '@/components/app/SectionHeader';
 import { StatCard } from '@/components/app/StatCard';
-import { Button } from '@/components/ui/Button';
+import { HarvestCard } from '@/components/app/home/HarvestCard';
+import { LowStockBanner } from '@/components/app/home/LowStockBanner';
+import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import { useFarmerOrders } from '@/hooks/useFarmerOrders';
+import { useUnreadNotificationCount } from '@/hooks/useUnreadNotificationCount';
 import { useFarmerStats } from '@/hooks/useFarmerStats';
-import { useMyListings } from '@/hooks/useMyListings';
+import { useLowStockProducts } from '@/hooks/useLowStockProducts';
+import { useUpcomingHarvest } from '@/hooks/useUpcomingHarvest';
 import { strings } from '@/i18n/strings';
 import { formatNaira } from '@/lib/currency';
 import { timeOfDayGreeting } from '@/lib/greeting';
+import { shareFarmerProfile } from '@/lib/shareProfile';
+import type { OrderStatus } from '@/lib/orderStatus';
 import { useAuthStore } from '@/store/useAuthStore';
 import { colors, geometry, spacing } from '@/theme/tokens';
 import { typography } from '@/theme/typography';
@@ -24,27 +31,106 @@ import { typography } from '@/theme/typography';
 export function FarmerHome() {
   const farmerProfile = useAuthStore((state) => state.farmerProfile);
   const fetchProfile = useAuthStore((state) => state.fetchProfile);
+  const unreadNotifications = useUnreadNotificationCount();
 
   const { stats, refresh: refreshStats } = useFarmerStats(farmerProfile?.id);
   const { orders, loading: ordersLoading, refresh: refreshOrders } = useFarmerOrders(
     farmerProfile?.id,
-    4
+    { limit: 3 }
   );
   const {
-    listings,
-    loading: listingsLoading,
-    refresh: refreshListings,
-    setAvailability,
-  } = useMyListings();
+    products: lowStockProducts,
+    loading: lowStockLoading,
+    refresh: refreshLowStock,
+  } = useLowStockProducts(farmerProfile?.id);
+  const {
+    products: upcomingHarvest,
+    loading: harvestLoading,
+    refresh: refreshHarvest,
+  } = useUpcomingHarvest(farmerProfile?.id);
+
+  const refreshAll = async () => {
+    await Promise.all([
+      refreshStats(),
+      refreshOrders(),
+      refreshLowStock(),
+      refreshHarvest(),
+      fetchProfile(),
+    ]);
+  };
 
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refreshStats(), refreshOrders(), refreshListings(), fetchProfile()]);
+    await refreshAll();
     setRefreshing(false);
   };
+  // Silent background refresh (no spinner) on focus + a 20s interval;
+  // onRefresh above (with the spinner) stays reserved for manual pull.
+  useAutoRefresh(refreshAll);
 
-  const listingsPreview = listings.slice(0, 3);
+  const quickActions: QuickAction[] = [
+    {
+      key: 'add-product',
+      icon: 'plus',
+      label: strings.farmerHubQuickAddProduct,
+      onPress: () => router.push('/(app)/listing/add'),
+    },
+    {
+      key: 'listings',
+      icon: 'list',
+      label: strings.farmerHubQuickListings,
+      onPress: () => router.push('/(app)/(tabs)/listings'),
+    },
+    {
+      key: 'orders',
+      icon: 'clipboard-list',
+      label: strings.farmerHubQuickOrders,
+      onPress: () => router.push('/(app)/(tabs)/orders'),
+    },
+    {
+      key: 'insights',
+      icon: 'chart-bar',
+      label: strings.farmerHubQuickInsights,
+      onPress: () => router.push('/(app)/insights'),
+    },
+    {
+      key: 'promotions',
+      icon: 'percent',
+      label: strings.farmerHubQuickPromotions,
+      onPress: () => router.push('/(app)/insights'),
+    },
+    {
+      key: 'reviews',
+      icon: 'star',
+      label: strings.farmerHubQuickReviews,
+      onPress: () => router.push('/(app)/reviews'),
+    },
+    {
+      key: 'business',
+      icon: 'store',
+      label: strings.farmerHubQuickBusiness,
+      onPress: () => router.push('/(app)/business/settings'),
+    },
+    {
+      key: 'share',
+      icon: 'share-alt',
+      label: strings.farmerHubQuickShare,
+      onPress: () => {
+        if (farmerProfile) {
+          shareFarmerProfile(farmerProfile.id, farmerProfile.farm_name);
+        }
+      },
+    },
+    {
+      key: 'messages',
+      icon: 'comment-dots',
+      label: strings.farmerHubQuickMessages,
+      onPress: () => router.push('/(app)/(tabs)/messages'),
+    },
+  ];
+
+  const soonestHarvest = upcomingHarvest[0];
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -71,6 +157,7 @@ export function FarmerHome() {
                 accessibilityLabel={strings.homeNotificationsLabel}
               >
                 <FontAwesome5 name="bell" size={16} color={colors.textPrimary} />
+                <CountBadge count={unreadNotifications} />
               </Pressable>
               <Pressable
                 onPress={() => router.push('/(app)/(tabs)/profile')}
@@ -83,51 +170,34 @@ export function FarmerHome() {
             </View>
           </View>
 
+          {!lowStockLoading && lowStockProducts.length > 0 ? (
+            <LowStockBanner
+              count={lowStockProducts.length}
+              onPress={() =>
+                router.push({ pathname: '/(app)/(tabs)/listings', params: { filter: 'low-stock' } })
+              }
+            />
+          ) : null}
+
           <View style={styles.statsRow}>
             <StatCard label={strings.farmerHomeStatListings} value={String(stats.activeListings)} />
             <StatCard label={strings.farmerHomeStatPendingOrders} value={String(stats.pendingOrders)} />
             <StatCard label={strings.farmerHomeStatWeekTotal} value={formatNaira(stats.weekTotal)} />
           </View>
 
-          <Button
-            label={strings.farmerHomeAddListing}
-            icon="plus"
-            onPress={() => router.push('/(app)/listing/add')}
-            style={styles.addButton}
-          />
+          <View style={styles.section}>
+            <Text style={[typography.label, styles.sectionTitle]}>{strings.farmerHubSectionManage}</Text>
+            <QuickActionGrid actions={quickActions} />
+          </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickRow}>
-            <QuickAccessItem
-              icon="store-alt"
-              label={strings.farmerHomeQuickListings}
-              onPress={() => router.push('/(app)/(tabs)/listings')}
+          {!harvestLoading && soonestHarvest ? (
+            <HarvestCard
+              productName={soonestHarvest.name}
+              harvestDate={soonestHarvest.harvest_date!}
+              preorderCount={soonestHarvest.preorderCount}
+              onPress={() => router.push(`/(app)/listing/${soonestHarvest.id}`)}
             />
-            <QuickAccessItem
-              icon="receipt"
-              label={strings.farmerHomeQuickOrders}
-              onPress={() => router.push('/(app)/(tabs)/orders')}
-            />
-            <QuickAccessItem
-              icon="comment-dots"
-              label={strings.farmerHomeQuickMessages}
-              onPress={() => router.push('/(app)/(tabs)/messages')}
-            />
-            <QuickAccessItem
-              icon="user-edit"
-              label={strings.farmerHomeQuickEditProfile}
-              onPress={() => router.push('/(app)/(tabs)/profile')}
-            />
-            <QuickAccessItem
-              icon="university"
-              label={strings.farmerHomeQuickBankDetails}
-              onPress={() => router.push('/(app)/(tabs)/profile')}
-            />
-            <QuickAccessItem
-              icon="cog"
-              label={strings.farmerHomeQuickSettings}
-              onPress={() => router.push('/(app)/(tabs)/profile')}
-            />
-          </ScrollView>
+          ) : null}
 
           <View style={styles.section}>
             <SectionHeader
@@ -143,40 +213,13 @@ export function FarmerHome() {
             ) : (
               <View style={styles.ordersList}>
                 {orders.map((order) => (
-                  <View key={order.id} style={styles.orderRow}>
-                    <Text style={[typography.label, styles.orderStatus]}>{order.status}</Text>
-                    <Text style={[typography.label, styles.orderTotal]}>
-                      {formatNaira(order.total)}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-
-          <View style={styles.section}>
-            <SectionHeader
-              title={strings.farmerHomeMyListings}
-              onSeeAll={() => router.push('/(app)/(tabs)/listings')}
-            />
-            {listingsLoading ? null : listings.length === 0 ? (
-              <EmptyState
-                icon="seedling"
-                title={strings.farmerHomeNoListingsTitle}
-                message={strings.farmerHomeNoListingsMessage}
-              />
-            ) : (
-              <View style={styles.listingsList}>
-                {listingsPreview.map((product) => (
-                  <ListingRow
-                    key={product.id}
-                    name={product.name}
-                    unit={product.unit}
-                    price={product.price}
-                    photoUrl={product.photo_url}
-                    isAvailable={product.is_available}
-                    onToggleAvailable={(next) => setAvailability(product.id, next)}
-                    onPress={() => router.push(`/(app)/listing/${product.id}`)}
+                  <OrderPreviewRow
+                    key={order.id}
+                    title={order.householdName}
+                    itemSummary={order.itemSummary}
+                    createdAt={order.created_at}
+                    status={order.status as OrderStatus}
+                    onPress={() => router.push(`/(app)/order/${order.id}`)}
                   />
                 ))}
               </View>
@@ -230,35 +273,16 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     gap: spacing[12],
-    marginTop: spacing[20],
-  },
-  addButton: {
     marginTop: spacing[16],
-  },
-  quickRow: {
-    marginTop: spacing[20],
   },
   section: {
     marginTop: spacing[24],
   },
-  ordersList: {
-    gap: spacing[8],
-  },
-  orderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: spacing[12],
-  },
-  orderStatus: {
+  sectionTitle: {
     color: colors.textPrimary,
-    textTransform: 'capitalize',
+    marginBottom: spacing[8],
   },
-  orderTotal: {
-    color: colors.harvestGreen,
-  },
-  listingsList: {
+  ordersList: {
     backgroundColor: colors.surface,
     borderRadius: 16,
     paddingHorizontal: spacing[12],
