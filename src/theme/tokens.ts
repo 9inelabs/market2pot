@@ -40,30 +40,53 @@ export const geometry = {
     height: 60,
     radius: 30,
   },
+  // Fill is harvestGreen at 20% (the design frame's own
+  // fill-opacity="0.2"), with a deepSoil label — NOT a green one. Both
+  // measured off assets/design/Onboarding.svg, replacing an earlier
+  // 0.15/green-label guess.
   secondaryButton: {
     height: 60,
     radius: 30,
-    opacity: 0.15,
+    opacity: 0.2,
+  },
+  // "Log Out" on welcome-back: deepSoil at 30%, which lands on the warm grey
+  // (#B9B3AB over cream) the design shows.
+  mutedButton: {
+    height: 60,
+    radius: 30,
+    opacity: 0.3,
   },
   textInput: {
     height: 70,
     radius: 25,
   },
+  // Exact rect from the design frame: 188.5x40.5 @ r20.25, goldenWheat
+  // fill at 20% behind a 0.5pt goldenWheat stroke, 10.5 apart.
   socialButton: {
-    height: 41,
-    radius: 20,
-    width: 188,
-    gap: 10,
+    height: 40.5,
+    radius: 20.25,
+    width: 188.5,
+    gap: 10.5,
+    borderWidth: 0.5,
+    opacity: 0.2,
   },
   signInPill: {
     width: 90,
     height: 39,
     radius: 19.5,
   },
+  // Rounded card the brand lock-up sits in on the photo backdrop. Sized from
+  // its contents (leaf + gap + wordmark = 186x38) plus the padding measured
+  // off the uploaded welcome mockup.
+  brandCard: {
+    radius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
 } as const;
 
 // Converts a "#rrggbb" color token into an rgba() string at the given alpha.
-// For translucent fills (e.g. secondaryButton's ~15% tint) — needed because
+// For translucent fills (e.g. secondaryButton's 20% tint) — needed because
 // View's own `opacity` style cascades to children/text, which is not what
 // "fill X @ N% opacity" means in the design doc.
 export function withOpacity(hex: string, alpha: number): string {

@@ -99,14 +99,16 @@ function ConversationRow({ item }: { item: ConversationListItem }) {
             <Text style={styles.viewProfileText}>{strings.messagesViewProfile}</Text>
           </Pressable>
         ) : null}
-        <Pressable
-          onPress={() => router.push(`/(app)/message/${item.id}`)}
-          style={[styles.actionButton, styles.replyButton]}
-          accessibilityRole="button"
-          accessibilityLabel={`${strings.messagesReply} — ${item.otherPartyName}`}
-        >
-          <Text style={styles.replyText}>{strings.messagesReply}</Text>
-        </Pressable>
+        {item.unread ? (
+          <Pressable
+            onPress={() => router.push(`/(app)/message/${item.id}`)}
+            style={[styles.actionButton, styles.replyButton]}
+            accessibilityRole="button"
+            accessibilityLabel={`${strings.messagesReply} — ${item.otherPartyName}`}
+          >
+            <Text style={styles.replyText}>{strings.messagesReply}</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );

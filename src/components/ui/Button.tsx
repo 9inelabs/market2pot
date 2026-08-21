@@ -1,11 +1,19 @@
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import type { ComponentProps, ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  type StyleProp,
+  type TextStyle,
+  type ViewStyle,
+} from 'react-native';
 
 import { colors, geometry, withOpacity } from '@/theme/tokens';
 import { typography } from '@/theme/typography';
 
-type Variant = 'primary' | 'secondary';
+type Variant = 'primary' | 'secondary' | 'muted';
 
 type Props = {
   label: string;
@@ -24,6 +32,9 @@ type Props = {
   loading?: boolean;
   icon?: ComponentProps<typeof FontAwesome5>['name'];
   style?: StyleProp<ViewStyle>;
+  // Size overrides for the brand screens, whose type is scaled off the
+  // design frame rather than taken from the fixed typography scale.
+  textStyle?: StyleProp<TextStyle>;
   children?: ReactNode;
 };
 
@@ -35,33 +46,25 @@ export function Button({
   loading,
   icon,
   style,
+  textStyle,
 }: Props) {
-  const textColor = variant === 'primary' ? colors.surface : colors.harvestGreen;
+  // Labels on the tinted variants are deepSoil, not the fill color — that's
+  // what the design frame shows for "Browse products" and "Log Out", and a
+  // green-on-green-tint label was never legible enough to be right.
+  const textColor = variant === 'primary' ? colors.warmCream : colors.textPrimary;
 
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
-      style={[
-        styles.base,
-        variant === 'primary' ? styles.primary : styles.secondary,
-        disabled && !loading && styles.disabled,
-        style,
-      ]}
+      style={[styles.base, styles[variant], disabled && !loading && styles.disabled, style]}
     >
       {loading ? (
         <ActivityIndicator color={textColor} />
       ) : (
         <>
           {icon ? <FontAwesome5 name={icon} size={16} color={textColor} /> : null}
-          <Text
-            style={[
-              typography.button,
-              variant === 'primary' ? styles.primaryText : styles.secondaryText,
-            ]}
-          >
-            {label}
-          </Text>
+          <Text style={[typography.button, { color: textColor }, textStyle]}>{label}</Text>
         </>
       )}
     </Pressable>
@@ -81,19 +84,16 @@ const styles = StyleSheet.create({
   primary: {
     backgroundColor: colors.harvestGreen,
   },
-  // "fill harvestGreen @ ~15% opacity" means a translucent tint on the
-  // background, not the whole view at 15% opacity — that would fade the
+  // "fill harvestGreen @ 20% opacity" means a translucent tint on the
+  // background, not the whole view at 20% opacity — that would fade the
   // label text to near-invisibility too. rgba keeps the text fully opaque.
   secondary: {
     backgroundColor: withOpacity(colors.harvestGreen, geometry.secondaryButton.opacity),
   },
+  muted: {
+    backgroundColor: withOpacity(colors.deepSoil, geometry.mutedButton.opacity),
+  },
   disabled: {
     opacity: 0.4,
-  },
-  primaryText: {
-    color: colors.surface,
-  },
-  secondaryText: {
-    color: colors.harvestGreen,
   },
 });

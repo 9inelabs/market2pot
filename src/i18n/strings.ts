@@ -7,10 +7,20 @@ export const strings = {
   back: 'Back',
 
   // Welcome — (onboarding)/welcome.tsx
-  welcomeHeadline: 'Fresh products straight from the farm',
-  welcomeSubtitle: 'Buy directly from local farmers near you',
+  // Explicit breaks match the design frame's exact two-line wrap. The
+  // headline would wrap there anyway at 388pt wide, but the subtitle fits on
+  // one line and the frame still breaks it — and iOS currently falls back to
+  // the system font, whose narrower metrics would re-wrap both differently.
+  welcomeHeadline: 'Fresh products straight\nfrom the farm',
+  welcomeSubtitle: 'Buy directly from local farmers\nnear you',
   welcomeBrowseProducts: 'Browse products',
   welcomeGetStarted: 'Get Started',
+  // Visible label stops at "with" — the design frame puts the provider mark
+  // (Google's G, Apple's apple) after the text instead of naming it. The full
+  // phrases below stay as the accessible names, since a screen reader gets
+  // nothing from an icon.
+  welcomeContinueWith: 'Continue with',
+  welcomeSignInWith: 'Sign in with',
   welcomeContinueWithGoogle: 'Continue with Google',
   welcomeSignInWithApple: 'Sign in with Apple',
   welcomeFooter: 'Visit www.market2pot.com to learn more',
@@ -274,6 +284,11 @@ export const strings = {
   listingFormHarvestDate: 'Harvest date (optional)',
   listingFormHarvestDatePlaceholder: 'Select a date',
   listingFormSave: 'Save Listing',
+  listingFormTakePhoto: 'Take Photo',
+  listingFormSelectGallery: 'Select from Gallery',
+  listingFormCameraDenied: 'Camera access is off. Enable it in Settings to take a photo.',
+  listingFormLibraryDenied: 'Photo library access is off. Enable it in Settings to choose a photo.',
+  listingFormCategoryHint: 'Pick the one that fits best — shoppers filter by these.',
   listingFormRequired: 'Fill in the product name, category, price, and unit to continue',
   listingFormPriceInvalid: 'Enter a valid price',
 

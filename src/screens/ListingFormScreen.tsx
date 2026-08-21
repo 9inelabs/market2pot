@@ -7,12 +7,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/Button';
 import { DateField } from '@/components/ui/DateField';
+import { PhotoActionPill } from '@/components/ui/PhotoActionPill';
 import { TextField } from '@/components/ui/TextField';
+import { useCategories } from '@/hooks/useCategories';
 import { strings } from '@/i18n/strings';
 import { supabase } from '@/lib/supabase';
 import { uploadProductPhoto } from '@/lib/productPhotoUpload';
 import { useAuthStore } from '@/store/useAuthStore';
-import { colors, geometry, spacing } from '@/theme/tokens';
+import { colors, geometry, spacing, withOpacity } from '@/theme/tokens';
 import { typography } from '@/theme/typography';
 
 type Props = {
@@ -25,6 +27,7 @@ function toISODate(date: Date): string {
 
 export function ListingFormScreen({ productId }: Props) {
   const farmerProfileId = useAuthStore((state) => state.farmerProfile?.id);
+  const { categories } = useCategories();
   const isEditing = !!productId;
 
   const [loading, setLoading] = useState(isEditing);
@@ -69,14 +72,31 @@ export function ListingFormScreen({ productId }: Props) {
     };
   }, [productId]);
 
-  const pickPhotos = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: true,
-      quality: 1,
-    });
+  const pickFrom = async (source: 'camera' | 'library') => {
+    setError(null);
+    const permission =
+      source === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      setError(
+        source === 'camera' ? strings.listingFormCameraDenied : strings.listingFormLibraryDenied
+      );
+      return;
+    }
+
+    // The camera takes one shot at a time; the library can add several at
+    // once, which is the whole point of a multi-photo listing.
+    const result =
+      source === 'camera'
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsMultipleSelection: true,
+            quality: 1,
+          });
+
     if (!result.canceled && result.assets.length > 0) {
       setLocalPhotoUris((current) => [...current, ...result.assets.map((asset) => asset.uri)]);
     }
@@ -219,14 +239,19 @@ export function ListingFormScreen({ productId }: Props) {
                 </Pressable>
               </View>
             ))}
-            <Pressable
-              onPress={pickPhotos}
-              style={styles.photoAddTile}
-              accessibilityRole="button"
-              accessibilityLabel={strings.listingFormAddPhoto}
-            >
-              <FontAwesome5 name="camera" size={16} color={colors.textMuted} />
-            </Pressable>
+          </View>
+
+          <View style={styles.photoActions}>
+            <PhotoActionPill
+              icon="camera"
+              label={strings.listingFormTakePhoto}
+              onPress={() => pickFrom('camera')}
+            />
+            <PhotoActionPill
+              icon="images"
+              label={strings.listingFormSelectGallery}
+              onPress={() => pickFrom('library')}
+            />
           </View>
 
           <Text style={[typography.label, styles.fieldLabel]}>{strings.listingFormName}</Text>
@@ -247,12 +272,30 @@ export function ListingFormScreen({ productId }: Props) {
           />
 
           <Text style={[typography.label, styles.fieldLabel]}>{strings.listingFormCategory}</Text>
-          <TextField
-            value={category}
-            onChangeText={setCategory}
-            placeholder={strings.listingFormCategoryPlaceholder}
-            autoCapitalize="words"
-          />
+          <Text style={[typography.caption, styles.fieldHint]}>
+            {strings.listingFormCategoryHint}
+          </Text>
+          <View style={styles.categoryChips}>
+            {categories.map((option) => {
+              const selected = category === option.name;
+              return (
+                <Pressable
+                  key={option.id}
+                  onPress={() => setCategory(option.name)}
+                  style={[styles.categoryChip, selected && styles.categoryChipSelected]}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={option.name}
+                >
+                  <Text
+                    style={[styles.categoryChipLabel, selected && styles.categoryChipLabelSelected]}
+                  >
+                    {option.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
 
           <View style={styles.row}>
             <View style={styles.rowField}>
@@ -341,6 +384,36 @@ export function ListingFormScreen({ productId }: Props) {
 }
 
 const styles = StyleSheet.create({
+  fieldHint: {
+    color: colors.textMuted,
+    marginBottom: spacing[8],
+  },
+  categoryChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing[8],
+  },
+  categoryChip: {
+    // 44pt minimum tap target, even though the chip reads smaller.
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: spacing[16],
+    borderRadius: 22,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: withOpacity(colors.deepSoil, 0.12),
+  },
+  categoryChipSelected: {
+    backgroundColor: colors.harvestGreen,
+    borderColor: colors.harvestGreen,
+  },
+  categoryChipLabel: {
+    ...typography.label,
+    color: colors.textPrimary,
+  },
+  categoryChipLabelSelected: {
+    color: colors.surface,
+  },
   safeArea: {
     flex: 1,
     backgroundColor: colors.warmCream,
@@ -367,6 +440,12 @@ const styles = StyleSheet.create({
     marginTop: spacing[16],
     marginBottom: spacing[8],
   },
+  photoActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing[8],
+    marginTop: spacing[12],
+  },
   photoRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -390,16 +469,6 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 9,
     backgroundColor: 'rgba(42, 36, 32, 0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  photoAddTile: {
-    width: 64,
-    height: 64,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.skeleton,
     alignItems: 'center',
     justifyContent: 'center',
   },

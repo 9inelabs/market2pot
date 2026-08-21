@@ -100,4 +100,29 @@ export const fontFamilies = {
   bodyRegular: bodyFamilies.regular,
   bodyMedium: bodyFamilies.medium,
   bodySemibold: bodyFamilies.semibold,
+  bodyBold: bodyFamilies.bold,
 } as const;
+
+// Family (plus the iOS fallback's explicit weight) with no size attached —
+// for the two brand screens, whose type sizes come from the design frame and
+// are scaled per-device rather than picked off the fixed scale above.
+export function bodyFont(weight: BodyWeight): TextStyle {
+  return body(weight);
+}
+
+export function headerFont(): TextStyle {
+  return header();
+}
+
+// Inter explicitly, on BOTH platforms — for the places a design calls for
+// Inter by name rather than "whatever the body family is". `bodyFont()` above
+// deliberately does not give you Inter on iOS: it honours the build spec's
+// intent that iOS use SF Pro Text, and currently falls back to the OS system
+// font because those .otf files aren't bundled. Inter itself is loaded on both
+// platforms by useAppFonts, so naming it directly always works.
+export const interFont = {
+  regular: { fontFamily: 'Inter_400Regular' },
+  medium: { fontFamily: 'Inter_500Medium' },
+  semibold: { fontFamily: 'Inter_600SemiBold' },
+  bold: { fontFamily: 'Inter_700Bold' },
+} as const satisfies Record<string, TextStyle>;

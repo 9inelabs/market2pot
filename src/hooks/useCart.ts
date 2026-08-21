@@ -1,138 +1,73 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
+import {
+  selectItemCount,
+  selectSubtotal,
+  useCartStore,
+  type CartLine,
+} from '@/store/useCartStore';
 
-export type CartLine = {
-  cartItemId: string;
-  productId: string;
-  name: string;
-  price: number;
-  unit: string;
-  photoUrl: string | null;
-  quantity: number;
-  quantityAvailable: number;
-  farmerId: string;
-  farmName: string;
-};
+export type { CartLine };
 
-// Real, persistent cart (cart_items table) — replaces the old local-only
-// useCartStore. One farmer per cart: addItem clears any existing lines from
-// a different farmer first, but only after the caller has already confirmed
-// that with the shopper (see ProductQuickViewModal) — this hook itself just
-// does what it's told, it doesn't own the confirmation UX.
+// Module-level, not per-component: every screen that mounts useCart() would
+// otherwise open its own Realtime channel and fire its own initial load.
+// One subscription serves all of them, torn down when the user changes.
+let channelUserId: string | null = null;
+let channel: ReturnType<typeof supabase.channel> | null = null;
+
+function ensureSubscription(userId: string | undefined) {
+  if (channelUserId === (userId ?? null)) return;
+
+  if (channel) {
+    supabase.removeChannel(channel);
+    channel = null;
+  }
+  channelUserId = userId ?? null;
+  if (!userId) return;
+
+  // Keeps the badge honest across devices and against writes made by an Edge
+  // Function (checkout clears the cart server-side). Local mutations already
+  // update the store optimistically — this is the backstop, not the primary
+  // path.
+  channel = supabase
+    .channel(`cart_items:${userId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'cart_items', filter: `household_id=eq.${userId}` },
+      () => {
+        void useCartStore.getState().refresh();
+      }
+    )
+    .subscribe();
+}
+
+// The cart, backed by a single shared store — see src/store/useCartStore.ts
+// for why this stopped being a plain useState hook.
 export function useCart() {
   const userId = useAuthStore((state) => state.session?.user.id);
-  const [lines, setLines] = useState<CartLine[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    if (!userId) {
-      setLines([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    const { data } = await supabase
-      .from('cart_items')
-      .select(
-        'id, quantity, products(id, name, price, unit, photo_urls, quantity_available, farmer_id, farmer_profiles(farm_name))'
-      )
-      .eq('household_id', userId)
-      .order('created_at', { ascending: true });
+  const lines = useCartStore((state) => state.lines);
+  const loading = useCartStore((state) => state.loading);
+  const hasLoaded = useCartStore((state) => state.hasLoaded);
+  const refresh = useCartStore((state) => state.refresh);
+  const addItem = useCartStore((state) => state.addItem);
+  const updateQuantity = useCartStore((state) => state.updateQuantity);
+  const removeItem = useCartStore((state) => state.removeItem);
+  const clear = useCartStore((state) => state.clear);
 
-    type Row = (typeof data extends (infer R)[] | null ? R : never) & {
-      products:
-        | {
-            id: string;
-            name: string;
-            price: number;
-            unit: string;
-            photo_urls: string[];
-            quantity_available: number;
-            farmer_id: string;
-            farmer_profiles: { farm_name: string } | null;
-          }
-        | null;
-    };
-
-    setLines(
-      ((data as Row[] | null) ?? [])
-        .filter((row) => row.products)
-        .map((row) => ({
-          cartItemId: row.id,
-          productId: row.products!.id,
-          name: row.products!.name,
-          price: row.products!.price,
-          unit: row.products!.unit,
-          photoUrl: row.products!.photo_urls[0] ?? null,
-          quantity: row.quantity,
-          quantityAvailable: row.products!.quantity_available,
-          farmerId: row.products!.farmer_id,
-          farmName: row.products!.farmer_profiles?.farm_name ?? 'Farm',
-        }))
-    );
-    setLoading(false);
-  }, [userId]);
+  const itemCount = useCartStore(selectItemCount);
+  const subtotal = useCartStore(selectSubtotal);
 
   useEffect(() => {
-    load();
-  }, [load]);
-
-  // Returns 'ok', 'needs-clear-confirmation' (cart has a different farmer's
-  // items — caller should confirm with the user before retrying with
-  // clearFirst: true), or an error message string.
-  const addItem = async (
-    productId: string,
-    farmerId: string,
-    quantity: number,
-    options?: { clearFirst?: boolean }
-  ): Promise<'ok' | 'needs-clear-confirmation' | string> => {
-    if (!userId) return 'Sign in to add items to your cart.';
-
-    const currentFarmerId = lines[0]?.farmerId;
-    if (currentFarmerId && currentFarmerId !== farmerId && !options?.clearFirst) {
-      return 'needs-clear-confirmation';
+    ensureSubscription(userId);
+    // Only the first consumer to mount triggers the initial fetch; the rest
+    // read the store the subscription and that fetch already populated.
+    if (!hasLoaded) {
+      void refresh();
     }
-    if (currentFarmerId && currentFarmerId !== farmerId && options?.clearFirst) {
-      await supabase.from('cart_items').delete().eq('household_id', userId);
-    }
+  }, [userId, hasLoaded, refresh]);
 
-    const existing = lines.find((line) => line.productId === productId);
-    const { error } = await supabase.from('cart_items').upsert(
-      {
-        household_id: userId,
-        product_id: productId,
-        quantity: (options?.clearFirst ? 0 : (existing?.quantity ?? 0)) + quantity,
-      },
-      { onConflict: 'household_id,product_id' }
-    );
-    if (error) return error.message;
-    await load();
-    return 'ok';
-  };
-
-  const updateQuantity = async (cartItemId: string, quantity: number) => {
-    if (quantity <= 0) {
-      return removeItem(cartItemId);
-    }
-    setLines((current) => current.map((l) => (l.cartItemId === cartItemId ? { ...l, quantity } : l)));
-    await supabase.from('cart_items').update({ quantity }).eq('id', cartItemId);
-  };
-
-  const removeItem = async (cartItemId: string) => {
-    setLines((current) => current.filter((l) => l.cartItemId !== cartItemId));
-    await supabase.from('cart_items').delete().eq('id', cartItemId);
-  };
-
-  const clear = async () => {
-    if (!userId) return;
-    setLines([]);
-    await supabase.from('cart_items').delete().eq('household_id', userId);
-  };
-
-  const itemCount = lines.reduce((sum, line) => sum + line.quantity, 0);
-  const subtotal = lines.reduce((sum, line) => sum + line.price * line.quantity, 0);
-
-  return { lines, loading, itemCount, subtotal, refresh: load, addItem, updateQuantity, removeItem, clear };
+  return { lines, loading, itemCount, subtotal, refresh, addItem, updateQuantity, removeItem, clear };
 }

@@ -1,16 +1,64 @@
-import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
+import Feather from '@expo/vector-icons/Feather';
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CountBadge } from '@/components/app/CountBadge';
 import { LeafMark } from '@/components/brand/LeafMark';
 import { Wordmark } from '@/components/brand/Wordmark';
 import { PhotoBackdrop } from '@/components/marketing/PhotoBackdrop';
+import { Stagger } from '@/components/motion/Stagger';
 import { Button } from '@/components/ui/Button';
+import { useCart } from '@/hooks/useCart';
+import { useUnreadNotificationCount } from '@/hooks/useUnreadNotificationCount';
 import { strings } from '@/i18n/strings';
 import { useAuthStore } from '@/store/useAuthStore';
-import { colors, geometry, spacing } from '@/theme/tokens';
-import { typography } from '@/theme/typography';
+import { colors, withOpacity } from '@/theme/tokens';
+import { bodyFont, interFont } from '@/theme/typography';
+import { DESIGN_STATUS_BAR, useDesignScale } from '@/theme/useDesignScale';
+
+// Measured off the uploaded welcome-back mockup at the same 428x926 frame
+// welcome.tsx uses. Unlike welcome there's no vector export of this screen,
+// so these are read off the raster rather than lifted from an SVG — the
+// shared pieces (frame width, photo backdrop, pill geometry, tinted-fill
+// recipe) are taken from the vector frame so the two screens stay in step.
+const D = {
+  // How far up the produce band is pulled — see the knobs documented in
+  // PhotoBackdrop. More negative = band ends higher = more clean cream behind
+  // the wordmark.
+  backdropOffsetY: -90,
+  // Frame y=232 for the wordmark, less the nominal status bar the frame draws
+  // its photo behind. Shrinks first on a viewport shorter than the frame.
+  topOffset: 232 - DESIGN_STATUS_BAR,
+  topOffsetMin: 72,
+  wordmark: { width: 272, height: 67.5 },
+  leafGap: 16,
+  leaf: { width: 49, height: 54 },
+  headingGap: 42,
+  // "Welcome Back." is the quiet line and the name is the loud one — the
+  // design leans on that contrast harder than a 18/24 pairing does.
+  heading: { fontSize: 16, lineHeight: 20 },
+  nameGap: 6,
+  name: { fontSize: 28, lineHeight: 34 },
+  subtitleGap: 6,
+  subtitle: { fontSize: 14, lineHeight: 17 },
+  shortcutGap: 18,
+  shortcut: { size: 44, gap: 12, icon: 18, badge: 16 },
+  // The screen's slack: grows on a tall viewport, shrinks on a short one.
+  browseGap: 44,
+  browseGapMin: 20,
+  // Narrower and shorter than welcome's 388x60 buttons — this screen insets
+  // its column by 40 rather than 20.
+  button: { height: 52, radius: 26, fontSize: 17 },
+  logoutGap: 18,
+  hintGap: 12,
+  hint: { fontSize: 13, lineHeight: 16 },
+  signUpGap: 41,
+  signUp: { fontSize: 13, lineHeight: 16 },
+  bottom: 91,
+  bottomMin: 16,
+  screenPadding: 40,
+} as const;
 
 // Shown to a returning, fully-onboarded user on cold start (see the
 // routing gate in (onboarding)/intro.tsx) instead of either silently
@@ -21,6 +69,9 @@ export default function WelcomeBackScreen() {
   const profile = useAuthStore((state) => state.profile);
   const farmerProfile = useAuthStore((state) => state.farmerProfile);
   const signOut = useAuthStore((state) => state.signOut);
+  const unreadNotifications = useUnreadNotificationCount();
+  const { itemCount } = useCart();
+  const { ds, frameWidth } = useDesignScale();
 
   const displayName = farmerProfile?.farm_name ?? profile?.full_name ?? '';
 
@@ -36,133 +87,244 @@ export default function WelcomeBackScreen() {
     router.replace('/(auth)/login');
   };
 
+  const shortcutStyle = [
+    styles.shortcutButton,
+    { width: ds(D.shortcut.size), height: ds(D.shortcut.size), borderRadius: ds(D.shortcut.size / 2) },
+  ];
+
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <PhotoBackdrop>
-        <View style={styles.content}>
-          <View style={styles.brandBlock}>
-            <Wordmark width={180} height={50} />
-          </View>
+    // Lifted further than welcome's default: this screen's first content (the
+    // wordmark) sits higher up the cream than welcome's hero does, so the
+    // produce band has to have finished fading sooner. See PhotoBackdrop.
+    <PhotoBackdrop offsetY={D.backdropOffsetY}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <View
+          style={[
+            styles.frame,
+            { width: frameWidth, paddingHorizontal: ds(D.screenPadding) },
+          ]}
+        >
+          <View style={{ height: ds(D.topOffset), minHeight: ds(D.topOffsetMin), flexShrink: 1 }} />
 
-          <View style={styles.leafWrap}>
-            <LeafMark width={40} height={44} />
-          </View>
+          <Stagger initialDelay={80}>
+            <View style={styles.centered}>
+              <Wordmark width={ds(D.wordmark.width)} height={ds(D.wordmark.height)} />
+            </View>
 
-          <Text style={[typography.h1, styles.heading]}>{strings.welcomeBackHeading}</Text>
-          <Text style={[typography.button, styles.name]} numberOfLines={1}>
-            {displayName}
-          </Text>
-          <Text style={[typography.body, styles.subtitle]}>{strings.welcomeBackSubtitle}</Text>
+            <View style={[styles.centered, { marginTop: ds(D.leafGap) }]}>
+              <LeafMark width={ds(D.leaf.width)} height={ds(D.leaf.height)} />
+            </View>
 
-          <View style={styles.shortcutRow}>
-            <Pressable
-              onPress={() => goToShortcut('/(app)/notifications')}
-              style={styles.shortcutButton}
-              accessibilityRole="button"
-              accessibilityLabel={strings.homeNotificationsLabel}
+            <Text
+              style={[
+                styles.heading,
+                {
+                  fontSize: ds(D.heading.fontSize),
+                  lineHeight: ds(D.heading.lineHeight),
+                  marginTop: ds(D.headingGap),
+                },
+              ]}
             >
-              <FontAwesome5 name="bell" size={16} color={colors.textPrimary} />
-            </Pressable>
-            <Pressable
-              onPress={() => goToShortcut('/(app)/cart')}
-              style={styles.shortcutButton}
-              accessibilityRole="button"
-              accessibilityLabel={strings.homeCartLabel}
-            >
-              <FontAwesome5 name="shopping-cart" size={16} color={colors.textPrimary} />
-            </Pressable>
-          </View>
+              {strings.welcomeBackHeading}
+            </Text>
 
-          <Button label={strings.welcomeBackBrowse} onPress={enterApp} style={styles.browseButton} />
-          <Button
-            label={strings.welcomeBackLogout}
-            variant="secondary"
-            onPress={handleLogout}
-            style={styles.logoutButton}
+            <Text
+              style={[
+                styles.name,
+                {
+                  fontSize: ds(D.name.fontSize),
+                  lineHeight: ds(D.name.lineHeight),
+                  marginTop: ds(D.nameGap),
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {displayName}
+            </Text>
+
+            <Text
+              style={[
+                styles.subtitle,
+                {
+                  fontSize: ds(D.subtitle.fontSize),
+                  lineHeight: ds(D.subtitle.lineHeight),
+                  marginTop: ds(D.subtitleGap),
+                },
+              ]}
+            >
+              {strings.welcomeBackSubtitle}
+            </Text>
+
+            <View
+              style={[
+                styles.shortcutRow,
+                { gap: ds(D.shortcut.gap), marginTop: ds(D.shortcutGap) },
+              ]}
+            >
+              <Pressable
+                onPress={() => goToShortcut('/(app)/notifications')}
+                style={shortcutStyle}
+                accessibilityRole="button"
+                accessibilityLabel={strings.homeNotificationsLabel}
+              >
+                <Feather name="bell" size={ds(D.shortcut.icon)} color={colors.textPrimary} />
+                <CountBadge count={unreadNotifications} size={ds(D.shortcut.badge)} />
+              </Pressable>
+              <Pressable
+                onPress={() => goToShortcut('/(app)/cart')}
+                style={shortcutStyle}
+                accessibilityRole="button"
+                accessibilityLabel={strings.homeCartLabel}
+              >
+                <Feather name="shopping-cart" size={ds(D.shortcut.icon)} color={colors.textPrimary} />
+                <CountBadge
+                  count={itemCount}
+                  color={colors.goldenWheat}
+                  size={ds(D.shortcut.badge)}
+                />
+              </Pressable>
+            </View>
+          </Stagger>
+
+          <View
+            style={{
+              height: ds(D.browseGap),
+              minHeight: ds(D.browseGapMin),
+              flexGrow: 1,
+              flexShrink: 1,
+            }}
           />
-          <Text style={[typography.caption, styles.logoutHint]}>{strings.welcomeBackLogoutHint}</Text>
 
-          <View style={styles.signUpRow}>
-            <Text style={typography.caption}>{strings.welcomeBackNoAccount} </Text>
-            <Pressable
-              onPress={() => router.push('/(profile)/role')}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={strings.welcomeBackSignUp}
+          <Stagger initialDelay={290}>
+            <Button
+              label={strings.welcomeBackBrowse}
+              onPress={enterApp}
+              style={[styles.button, { height: ds(D.button.height), borderRadius: ds(D.button.radius) }]}
+              textStyle={{ fontSize: ds(D.button.fontSize) }}
+            />
+
+            <Button
+              label={strings.welcomeBackLogout}
+              variant="muted"
+              onPress={handleLogout}
+              style={[
+                styles.button,
+                {
+                  height: ds(D.button.height),
+                  borderRadius: ds(D.button.radius),
+                  marginTop: ds(D.logoutGap),
+                },
+              ]}
+              textStyle={{ fontSize: ds(D.button.fontSize) }}
+            />
+
+            <Text
+              style={[
+                styles.hint,
+                {
+                  fontSize: ds(D.hint.fontSize),
+                  lineHeight: ds(D.hint.lineHeight),
+                  marginTop: ds(D.hintGap),
+                },
+              ]}
             >
-              <Text style={styles.signUpLink}>{strings.welcomeBackSignUp}</Text>
-            </Pressable>
-          </View>
+              {strings.welcomeBackLogoutHint}
+            </Text>
+
+            <View style={[styles.signUpRow, { marginTop: ds(D.signUpGap) }]}>
+              <Text
+                style={[
+                  styles.signUpPrompt,
+                  { fontSize: ds(D.signUp.fontSize), lineHeight: ds(D.signUp.lineHeight) },
+                ]}
+              >
+                {strings.welcomeBackNoAccount}{' '}
+              </Text>
+              <Pressable
+                onPress={() => router.push('/(profile)/role')}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={strings.welcomeBackSignUp}
+              >
+                <Text
+                  style={[
+                    styles.signUpLink,
+                    { fontSize: ds(D.signUp.fontSize), lineHeight: ds(D.signUp.lineHeight) },
+                  ]}
+                >
+                  {strings.welcomeBackSignUp}
+                </Text>
+              </Pressable>
+            </View>
+          </Stagger>
+
+          <View style={{ height: ds(D.bottom), minHeight: ds(D.bottomMin), flexShrink: 1 }} />
         </View>
-      </PhotoBackdrop>
-    </SafeAreaView>
+      </SafeAreaView>
+    </PhotoBackdrop>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.warmCream,
+    // No background — PhotoBackdrop paints behind this.
   },
-  content: {
+  frame: {
     flex: 1,
+    alignSelf: 'center',
+  },
+  centered: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: geometry.screenPaddingButtons,
   },
-  brandBlock: {
-    alignItems: 'center',
-    marginTop: spacing[24],
-  },
-  leafWrap: {
-    marginTop: spacing[24],
-    marginBottom: spacing[16],
-  },
+  // Inter by name on both platforms, not bodyFont() — the design specifies
+  // Inter here, and bodyFont() would hand iOS the system font instead.
   heading: {
+    ...interFont.regular,
     color: colors.textPrimary,
+    textAlign: 'center',
   },
   name: {
+    ...interFont.bold,
     color: colors.textPrimary,
-    marginTop: spacing[4],
+    textAlign: 'center',
   },
   subtitle: {
+    ...bodyFont('medium'),
     color: colors.harvestGreen,
-    marginTop: spacing[4],
+    textAlign: 'center',
   },
   shortcutRow: {
     flexDirection: 'row',
-    gap: spacing[12],
-    marginTop: spacing[20],
-    marginBottom: spacing[32],
+    justifyContent: 'center',
   },
   shortcutButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
     borderWidth: 1,
     borderColor: colors.skeleton,
     backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  browseButton: {
-    alignSelf: 'stretch',
-    marginBottom: spacing[12],
-  },
-  logoutButton: {
+  button: {
     alignSelf: 'stretch',
   },
-  logoutHint: {
-    color: colors.textMuted,
-    marginTop: spacing[8],
+  hint: {
+    ...bodyFont('regular'),
+    color: colors.harvestGreen,
+    textAlign: 'center',
   },
   signUpRow: {
     flexDirection: 'row',
-    marginTop: spacing[24],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signUpPrompt: {
+    ...bodyFont('regular'),
+    color: withOpacity(colors.deepSoil, 0.5),
   },
   signUpLink: {
-    ...typography.caption,
-    color: colors.harvestGreen,
-    fontWeight: '600',
+    ...bodyFont('semibold'),
+    color: colors.textPrimary,
+    textDecorationLine: 'underline',
   },
 });

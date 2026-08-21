@@ -17,7 +17,11 @@ export function useLowStockProducts(farmerProfileId: string | undefined) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // NOT set on refetch — see useAutoRefresh. This hook is polled every 20s;
+    // flipping loading back to true made every consumer unmount its list and
+    // remount it, which is the visible blink/flash the screens had. loading
+    // now means "first load hasn't finished", nothing else, so a background
+    // refresh swaps the data underneath without the UI ever going empty.
     // low_stock_products is a view (quantity_available <= low_stock_threshold
     // can't be expressed as a PostgREST column-to-column filter directly).
     const { data } = await supabase

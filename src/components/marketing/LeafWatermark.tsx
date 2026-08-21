@@ -1,26 +1,29 @@
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { LeafMark } from '@/components/brand/LeafMark';
+import { useDesignScale } from '@/theme/useDesignScale';
 
-const OPACITY = 0.07;
+// Design frame: <rect x="32" y="169" width="364" height="399"
+// fill-opacity="0.07"> — a specific leaf, at a specific place, behind the
+// hero. Previously drawn as a screen-centered mark at 1.4x the viewport
+// width, which is neither.
+const MARK = { x: 32, y: 169, width: 364, height: 399, opacity: 0.07 };
 
-// Decorative background mark, absolutely positioned behind all screen
-// content. Non-interactive so it never intercepts touches.
 export function LeafWatermark() {
-  const { width } = useWindowDimensions();
-  const size = width * 1.4;
+  const { ds } = useDesignScale();
 
   return (
-    <View style={[styles.container, { opacity: OPACITY }]} pointerEvents="none">
-      <LeafMark width={size} height={size} />
+    <View
+      pointerEvents="none"
+      style={[styles.container, { left: ds(MARK.x), top: ds(MARK.y), opacity: MARK.opacity }]}
+    >
+      <LeafMark width={ds(MARK.width)} height={ds(MARK.height)} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFill,
-    alignItems: 'center',
-    justifyContent: 'center',
+    position: 'absolute',
   },
 });

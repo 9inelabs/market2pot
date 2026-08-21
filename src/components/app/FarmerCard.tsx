@@ -3,49 +3,73 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AvatarPicker } from '@/components/ui/AvatarPicker';
 import { getInitials } from '@/lib/initials';
+import { toTitleCase } from '@/lib/titleCase';
 import { colors, spacing } from '@/theme/tokens';
-import { typography } from '@/theme/typography';
+import { bodyFont } from '@/theme/typography';
 
 type Props = {
   name: string;
   avatarUrl: string | null;
-  // Currently unused for gating — every farmer shows as verified for now
-  // (explicit decision, matches the design mockup where every visible card
-  // is verified). Kept in the data flow rather than deleted, since real
-  // per-farmer verification will matter again once trust/production
-  // concerns catch up with the schema (bank_accounts.verification_status
-  // already exists and is computed correctly upstream).
   isVerified: boolean;
   locationLine: string | null;
   onPress: () => void;
 };
 
+const CARD_WIDTH = 104;
+const AVATAR_SIZE = 70;
+
 // Horizontal-scroll farmer card — Household Home's "Farmers Near You" row.
-export function FarmerCard({ name, avatarUrl, locationLine, onPress }: Props) {
+//
+// isVerified now actually gates the badge and the "Verified farmer" line, as
+// the reference shows (its second card has neither). It used to be accepted
+// and ignored, with every card rendering as verified.
+export function FarmerCard({ name, avatarUrl, isVerified, locationLine, onPress }: Props) {
+  const displayName = toTitleCase(name);
+
   return (
     <View style={styles.card}>
-      <AvatarPicker uri={avatarUrl} initials={getInitials(name)} size={56} />
-
-      <View style={styles.nameRow}>
-        <Text style={[typography.label, styles.name]} numberOfLines={1}>
-          {name}
-        </Text>
-        <FontAwesome5 name="check-circle" size={14} color={colors.harvestGreen} solid />
+      <View style={styles.avatarRing}>
+        <AvatarPicker uri={avatarUrl} initials={getInitials(name)} size={AVATAR_SIZE} />
       </View>
 
-      <Text style={styles.verified}>Verified farmer</Text>
+      <View style={styles.nameRow}>
+        <Text style={styles.name} numberOfLines={1}>
+          {displayName}
+        </Text>
+        {isVerified ? (
+          <FontAwesome5
+            name="check-circle"
+            size={9}
+            color={colors.harvestGreen}
+            solid
+            // The name already carries the meaning for a screen reader via
+            // the accessibilityLabel below; this is decoration.
+            accessibilityElementsHidden
+          />
+        ) : null}
+      </View>
+
+      {isVerified ? <Text style={styles.verified}>Verified farmer</Text> : null}
+
       {locationLine ? (
-        <Text style={[typography.caption, styles.location]} numberOfLines={1}>
+        <Text style={styles.location} numberOfLines={1}>
           {locationLine}
         </Text>
       ) : null}
 
+      {/* Spacer keeps the View pill on one baseline across the row even
+          though unverified cards are two lines shorter. */}
+      <View style={styles.spacer} />
+
       <Pressable
         onPress={onPress}
         style={styles.viewButton}
-        hitSlop={6}
+        // The pill itself is only 20pt tall to match the reference, so the
+        // 44pt minimum tap target comes from hitSlop rather than from
+        // inflating the visual.
+        hitSlop={{ top: 12, bottom: 12, left: 20, right: 20 }}
         accessibilityRole="button"
-        accessibilityLabel={`View ${name}'s farm profile`}
+        accessibilityLabel={`View ${displayName}'s farm profile${isVerified ? ', verified farmer' : ''}`}
       >
         <Text style={styles.viewLabel}>View</Text>
       </Pressable>
@@ -55,47 +79,60 @@ export function FarmerCard({ name, avatarUrl, locationLine, onPress }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    width: 100,
+    width: CARD_WIDTH,
     alignItems: 'center',
+  },
+  avatarRing: {
+    borderRadius: AVATAR_SIZE / 2,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     marginTop: spacing[8],
+    maxWidth: CARD_WIDTH,
   },
   name: {
+    ...bodyFont('bold'),
+    fontSize: 11,
     color: colors.textPrimary,
-    maxWidth: 82,
+    flexShrink: 1,
   },
   verified: {
-    ...typography.caption,
-    fontSize: 11,
-    color: colors.goldenWheatText,
-    marginTop: 2,
+    ...bodyFont('medium'),
+    fontSize: 9,
+    color: colors.terracotta,
+    marginTop: 1,
   },
   location: {
+    ...bodyFont('regular'),
+    fontSize: 9,
     color: colors.textMuted,
     textAlign: 'center',
-    marginTop: 2,
+    marginTop: 1,
+  },
+  // Keeps the View pill on one baseline across the row even though an
+  // unverified card is two lines shorter — but with no minimum of its own, so
+  // on the tallest card the pill sits directly under the text.
+  spacer: {
+    flex: 1,
   },
   viewButton: {
-    marginTop: spacing[8],
-    height: 30,
-    minWidth: 64,
-    borderRadius: 15,
+    marginTop: spacing[4],
+    height: 20,
+    minWidth: 46,
+    borderRadius: 10,
     paddingHorizontal: spacing[12],
     backgroundColor: colors.goldenWheat,
     alignItems: 'center',
     justifyContent: 'center',
   },
   viewLabel: {
-    ...typography.caption,
-    fontSize: 12,
+    ...bodyFont('bold'),
+    fontSize: 10,
     // Golden Wheat is a bright mid-tone — white text on it fails WCAG AA
-    // (goldenWheat is only meant as a decorative accent per theme/tokens.ts'
-    // own comment). Dark text keeps the button legible.
+    // (it's a decorative accent per theme/tokens.ts' own note). Dark text
+    // keeps the button legible.
     color: colors.deepSoil,
-    fontWeight: '600',
   },
 });

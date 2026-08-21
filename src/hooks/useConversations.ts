@@ -36,7 +36,11 @@ export function useConversations(role: 'farmer' | 'household') {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // NOT set on refetch — see useAutoRefresh. This hook is polled every 20s;
+    // flipping loading back to true made every consumer unmount its list and
+    // remount it, which is the visible blink/flash the screens had. loading
+    // now means "first load hasn't finished", nothing else, so a background
+    // refresh swaps the data underneath without the UI ever going empty.
 
     let query = supabase
       .from('conversations')

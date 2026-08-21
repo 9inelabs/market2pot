@@ -4,16 +4,27 @@ import { colors } from '@/theme/tokens';
 
 type Props = {
   count: number;
+  // Defaults to terracotta (tab bars, header buttons). welcome-back's cart
+  // badge is goldenWheat in the design.
+  color?: string;
+  size?: number;
 };
 
 // Small red-dot-with-number overlay for tab icons / header buttons — the
 // unread message/notification counts. Renders nothing at 0, so callers can
 // mount it unconditionally.
-export function CountBadge({ count }: Props) {
+export function CountBadge({ count, color, size = 16 }: Props) {
   if (count <= 0) return null;
   return (
-    <View style={styles.badge} pointerEvents="none">
-      <Text style={styles.text} numberOfLines={1}>
+    <View
+      style={[
+        styles.badge,
+        { minWidth: size, height: size, borderRadius: size / 2 },
+        color ? { backgroundColor: color } : null,
+      ]}
+      pointerEvents="none"
+    >
+      <Text style={[styles.text, { fontSize: size * 0.5625 }]} numberOfLines={1}>
         {count > 99 ? '99+' : count}
       </Text>
     </View>

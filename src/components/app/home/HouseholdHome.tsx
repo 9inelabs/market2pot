@@ -2,26 +2,33 @@ import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CountBadge } from '@/components/app/CountBadge';
 import { EmptyState } from '@/components/app/EmptyState';
 import { FarmerCard } from '@/components/app/FarmerCard';
-import { ProductCard } from '@/components/app/ProductCard';
+import { HomeProductCard } from '@/components/app/home/HomeProductCard';
 import { ProductQuickViewModal } from '@/components/app/ProductQuickViewModal';
 import { SectionHeader } from '@/components/app/SectionHeader';
+import { AvatarPicker } from '@/components/ui/AvatarPicker';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
+import { useCategories } from '@/hooks/useCategories';
 import { shortLocationLabel, useDeliveryLocation } from '@/hooks/useDeliveryLocation';
-import { useFreshProducts, useProductCategories } from '@/hooks/useFreshProducts';
+import { useFreshProducts } from '@/hooks/useFreshProducts';
 import { useNearbyFarmers } from '@/hooks/useNearbyFarmers';
 import { useProductQuickView } from '@/hooks/useProductQuickView';
 import { useUnreadNotificationCount } from '@/hooks/useUnreadNotificationCount';
 import { strings } from '@/i18n/strings';
 import { timeOfDayGreeting } from '@/lib/greeting';
+import { getInitials } from '@/lib/initials';
+import { toTitleCase } from '@/lib/titleCase';
 import { useAuthStore } from '@/store/useAuthStore';
 import { colors, geometry, spacing, withOpacity } from '@/theme/tokens';
-import { typography } from '@/theme/typography';
+import { bodyFont } from '@/theme/typography';
+
+// Fresh Picks is a hard 3-up grid per the reference design — not the shared
+// ProductGrid's default 2, and not something that should quietly fall back.
+const GRID_COLUMNS = 3;
 
 export function HouseholdHome() {
   const profile = useAuthStore((state) => state.profile);
@@ -32,13 +39,9 @@ export function HouseholdHome() {
   const unreadNotifications = useUnreadNotificationCount();
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const { location, loading: locationLoading, refresh: refreshLocation } = useDeliveryLocation();
-  const { categories } = useProductCategories();
-  const {
-    farmers,
-    loading: farmersLoading,
-    refresh: refreshFarmers,
-  } = useNearbyFarmers();
+  const { location, refresh: refreshLocation } = useDeliveryLocation();
+  const { categories } = useCategories();
+  const { farmers, loading: farmersLoading, refresh: refreshFarmers } = useNearbyFarmers();
   const {
     products,
     loading: productsLoading,
@@ -55,150 +58,187 @@ export function HouseholdHome() {
     await refreshAll();
     setRefreshing(false);
   };
-  // Silent background refresh (no spinner) on focus + a 20s interval;
-  // onRefresh above (with the spinner) stays reserved for manual pull.
+  // Silent background refresh on focus + a 20s interval. The hooks it drives
+  // no longer flip `loading` back to true on a refetch, so this swaps data
+  // underneath the rendered lists instead of unmounting and remounting them
+  // — that unmount/remount was the visible blink. onRefresh above (with the
+  // spinner) stays reserved for a deliberate manual pull.
   useAutoRefresh(refreshAll);
 
   const productRows = useMemo(() => {
     const rows: (typeof products)[] = [];
-    for (let i = 0; i < products.length; i += 2) {
-      rows.push(products.slice(i, i + 2));
+    for (let i = 0; i < products.length; i += GRID_COLUMNS) {
+      rows.push(products.slice(i, i + GRID_COLUMNS));
     }
     return rows;
   }, [products]);
 
   const locationText = shortLocationLabel(location);
+  const displayName = toTitleCase(profile?.full_name) || 'there';
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <View style={styles.root}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.harvestGreen} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.harvestGreen}
+          />
         }
       >
-        <Animated.View entering={FadeIn.duration(220).easing(Easing.out(Easing.cubic))}>
-          <View style={styles.headerRow}>
-            <View style={styles.greetingBlock}>
-              <Text style={[typography.caption, styles.greeting]}>{timeOfDayGreeting()}</Text>
-              <Text style={styles.name} numberOfLines={1}>
-                {profile?.full_name ?? 'there'}
-              </Text>
-            </View>
+        {/* ---- Green header ------------------------------------------- */}
+        {/* Bleeds to the physical top of the screen (the status bar sits on
+            the green), so the safe-area inset is applied inside it rather
+            than around the whole screen. */}
+        <View style={styles.header}>
+          <SafeAreaView edges={['top']}>
+            <View style={styles.headerInner}>
+              <View style={styles.headerTopRow}>
+                <AvatarPicker uri={profile?.avatar_url ?? null} initials={getInitials(profile?.full_name)} size={36} />
 
-            <View style={styles.headerActions}>
+                <View style={styles.greetingBlock}>
+                  <Text style={styles.greeting} numberOfLines={1}>
+                    {timeOfDayGreeting()}
+                  </Text>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {displayName}
+                  </Text>
+                </View>
+
+                <Pressable
+                  onPress={() => router.push('/(app)/notifications')}
+                  style={styles.circleButton}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    unreadNotifications > 0
+                      ? `${strings.homeNotificationsLabel}, ${unreadNotifications} unread`
+                      : strings.homeNotificationsLabel
+                  }
+                >
+                  <FontAwesome5 name="bell" size={15} color={colors.textPrimary} />
+                  <CountBadge count={unreadNotifications} />
+                </Pressable>
+
+                <Pressable
+                  onPress={() => router.push('/(app)/cart')}
+                  style={styles.circleButton}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    itemCount > 0
+                      ? `${strings.homeCartLabel}, ${itemCount} ${itemCount === 1 ? 'item' : 'items'}`
+                      : `${strings.homeCartLabel}, empty`
+                  }
+                >
+                  <FontAwesome5 name="shopping-cart" size={15} color={colors.textPrimary} />
+                  <CountBadge count={itemCount} color={colors.goldenWheat} />
+                </Pressable>
+              </View>
+
               <Pressable
-                onPress={() => router.push('/(app)/notifications')}
-                style={styles.circleButton}
+                onPress={() => router.push('/(app)/change-location')}
+                style={styles.locationPill}
+                hitSlop={{ top: 8, bottom: 8 }}
                 accessibilityRole="button"
-                accessibilityLabel={strings.homeNotificationsLabel}
+                accessibilityHint="Changes the address your produce is delivered to"
+                accessibilityLabel={`${strings.homeLocationLabel}: ${locationText ?? 'not set'}`}
               >
-                <FontAwesome5 name="bell" size={16} color={colors.textPrimary} />
-                <CountBadge count={unreadNotifications} />
+                <FontAwesome5 name="map-marker-alt" size={12} color={colors.surface} />
+                <Text style={styles.locationText} numberOfLines={1}>
+                  {locationText ?? 'Set your location'}
+                </Text>
+                <FontAwesome5 name="chevron-down" size={10} color={colors.surface} />
               </Pressable>
+
               <Pressable
-                onPress={() => router.push('/(app)/cart')}
-                style={styles.circleButton}
-                accessibilityRole="button"
-                accessibilityLabel={`${strings.homeCartLabel}, ${itemCount} items`}
+                onPress={() => router.push('/(app)/(tabs)/search')}
+                style={styles.searchBar}
+                accessibilityRole="search"
+                accessibilityLabel={strings.homeSearchPlaceholder}
               >
-                <FontAwesome5 name="shopping-cart" size={16} color={colors.textPrimary} />
-                {itemCount > 0 ? (
-                  <View style={styles.cartBadge}>
-                    <Text style={styles.cartBadgeText}>{itemCount}</Text>
+                <FontAwesome5 name="search" size={14} color={colors.textMuted} />
+                <Text style={styles.searchPlaceholder}>{strings.homeSearchPlaceholder}</Text>
+              </Pressable>
+
+              {!farmerProfile ? (
+                <Pressable
+                  onPress={() => router.push('/(app)/register-farmer/farm-details')}
+                  style={styles.banner}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${strings.homeRegisterBannerTitle} ${strings.homeRegisterBannerSubtitle}`}
+                >
+                  <View style={styles.bannerIconWrap}>
+                    <FontAwesome5 name="seedling" size={14} color={colors.surface} />
                   </View>
-                ) : null}
-              </Pressable>
+                  <View style={styles.bannerTextWrap}>
+                    <Text style={styles.bannerTitle}>{strings.homeRegisterBannerTitle}</Text>
+                    <Text style={styles.bannerSubtitle}>{strings.homeRegisterBannerSubtitle}</Text>
+                  </View>
+                  <FontAwesome5 name="chevron-right" size={13} color={colors.surface} />
+                </Pressable>
+              ) : null}
             </View>
-          </View>
+          </SafeAreaView>
+        </View>
 
-          <Pressable
-            onPress={() => router.push('/(app)/change-location')}
-            style={styles.locationPill}
-            accessibilityRole="button"
-            accessibilityLabel={`${strings.homeLocationLabel}: ${locationText ?? 'not set'}`}
-          >
-            <FontAwesome5 name="map-marker-alt" size={13} color={colors.harvestGreen} />
-            <Text style={styles.locationText} numberOfLines={1}>
-              {locationLoading ? '…' : (locationText ?? 'Set location')}
-            </Text>
-            <FontAwesome5 name="chevron-down" size={11} color={colors.harvestGreen} />
-          </Pressable>
-
-          <Pressable
-            onPress={() => router.push('/(app)/(tabs)/search')}
-            style={styles.searchBar}
-            accessibilityRole="button"
-            accessibilityLabel={strings.homeSearchPlaceholder}
-          >
-            <FontAwesome5 name="search" size={15} color={colors.textMuted} />
-            <Text style={styles.searchPlaceholder}>{strings.homeSearchPlaceholder}</Text>
-          </Pressable>
-
-          {!farmerProfile ? (
-            <Pressable
-              onPress={() => router.push('/(app)/register-farmer/farm-details')}
-              style={styles.banner}
-              accessibilityRole="button"
-              accessibilityLabel={strings.homeRegisterBannerTitle}
-            >
-              <View style={styles.bannerIconWrap}>
-                <FontAwesome5 name="seedling" size={18} color={colors.surface} />
-              </View>
-              <View style={styles.bannerTextWrap}>
-                <Text style={[typography.label, styles.bannerTitle]}>
-                  {strings.homeRegisterBannerTitle}
-                </Text>
-                <Text style={[typography.caption, styles.bannerSubtitle]}>
-                  {strings.homeRegisterBannerSubtitle}
-                </Text>
-              </View>
-              <FontAwesome5 name="chevron-right" size={14} color={colors.terracotta} />
-            </Pressable>
-          ) : null}
-
-          <View style={styles.section}>
+        {/* ---- Body ---------------------------------------------------- */}
+        <View style={styles.body}>
+          <View style={styles.sectionHeaderWrap}>
             <SectionHeader
               title={strings.homeFarmersNearYou}
               onSeeAll={() => router.push('/(app)/nearby-farmers')}
             />
-            {farmersLoading ? null : farmers.length === 0 ? (
-              <EmptyState
-                icon="users"
-                title={strings.homeNoFarmersTitle}
-                message={strings.homeNoFarmersMessage}
-              />
-            ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.farmersRow}>
-                {farmers.map((farmer) => (
-                  <FarmerCard
-                    key={farmer.id}
-                    name={farmer.fullName}
-                    avatarUrl={farmer.avatarUrl}
-                    isVerified={farmer.isVerified}
-                    locationLine={farmer.locationLine}
-                    onPress={() => router.push(`/(app)/farmer/${farmer.id}`)}
-                  />
-                ))}
-              </ScrollView>
-            )}
           </View>
 
+          {farmersLoading ? null : farmers.length === 0 ? (
+            <EmptyState
+              icon="users"
+              title={strings.homeNoFarmersTitle}
+              message={strings.homeNoFarmersMessage}
+            />
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.farmersRow}
+            >
+              {farmers.map((farmer) => (
+                <FarmerCard
+                  key={farmer.id}
+                  name={farmer.fullName}
+                  avatarUrl={farmer.avatarUrl}
+                  isVerified={farmer.isVerified}
+                  locationLine={farmer.locationLine}
+                  onPress={() => router.push(`/(app)/farmer/${farmer.id}`)}
+                />
+              ))}
+            </ScrollView>
+          )}
+
           {categories.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipsRow}
+            >
               {categories.map((category) => {
-                const selected = selectedCategory === category;
+                const selected = selectedCategory === category.name;
                 return (
                   <Pressable
-                    key={category}
-                    onPress={() => setSelectedCategory(selected ? null : category)}
+                    key={category.id}
+                    onPress={() => setSelectedCategory(selected ? null : category.name)}
                     style={[styles.chip, selected && styles.chipSelected]}
                     accessibilityRole="button"
-                    accessibilityLabel={`Filter by ${category}`}
+                    accessibilityLabel={`Filter by ${category.name}`}
+                    accessibilityHint={selected ? 'Tap again to show all produce' : undefined}
                     accessibilityState={{ selected }}
                   >
                     <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>
-                      {category}
+                      {category.name}
                     </Text>
                   </Pressable>
                 );
@@ -206,39 +246,43 @@ export function HouseholdHome() {
             </ScrollView>
           ) : null}
 
-          <View style={styles.section}>
+          <View style={styles.sectionHeaderWrap}>
             <SectionHeader
               title={strings.homeFreshPicks}
               onSeeAll={() => router.push('/(app)/categories')}
             />
-            {productsLoading ? null : products.length === 0 ? (
-              <EmptyState
-                icon="seedling"
-                title={strings.homeNoProductsTitle}
-                message={strings.homeNoProductsMessage}
-              />
-            ) : (
-              <View style={styles.productGrid}>
-                {productRows.map((row, rowIndex) => (
-                  <View key={rowIndex} style={styles.productRow}>
-                    {row.map((product) => (
-                      <ProductCard
-                        key={product.id}
-                        name={product.name}
-                        unit={product.unit}
-                        price={product.price}
-                        photoUrl={product.photo_urls[0] ?? null}
-                        harvestDate={product.harvest_date}
-                        onPress={() => open(product)}
-                      />
-                    ))}
-                    {row.length === 1 ? <View style={styles.productSpacer} /> : null}
-                  </View>
-                ))}
-              </View>
-            )}
           </View>
-        </Animated.View>
+
+          {productsLoading ? null : products.length === 0 ? (
+            <EmptyState
+              icon="seedling"
+              title={strings.homeNoProductsTitle}
+              message={strings.homeNoProductsMessage}
+            />
+          ) : (
+            <View style={styles.productGrid}>
+              {productRows.map((row, rowIndex) => (
+                <View key={rowIndex} style={styles.productRow}>
+                  {row.map((product) => (
+                    <HomeProductCard
+                      key={product.id}
+                      name={product.name}
+                      unit={product.unit}
+                      price={product.price}
+                      photoUrl={product.photo_urls[0] ?? null}
+                      onPress={() => open(product)}
+                    />
+                  ))}
+                  {/* Keeps a short final row left-aligned at the same card
+                      width instead of stretching its cards across the row. */}
+                  {Array.from({ length: GRID_COLUMNS - row.length }).map((_, index) => (
+                    <View key={`spacer-${index}`} style={styles.productSpacer} />
+                  ))}
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
       </ScrollView>
 
       <ProductQuickViewModal
@@ -248,101 +292,90 @@ export function HouseholdHome() {
         onAddToCart={cart.addItem}
         onViewFull={viewFull}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  root: {
     flex: 1,
     backgroundColor: colors.warmCream,
   },
   scrollContent: {
-    paddingHorizontal: geometry.screenPaddingButtons,
-    paddingTop: spacing[12],
     paddingBottom: spacing[32],
   },
-  headerRow: {
+
+  // ---- Header ----
+  header: {
+    backgroundColor: colors.harvestGreen,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+  },
+  headerInner: {
+    paddingHorizontal: geometry.screenPaddingButtons,
+    paddingTop: spacing[12],
+    paddingBottom: spacing[16],
+  },
+  headerTopRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing[8],
   },
   greetingBlock: {
     flex: 1,
+    marginLeft: spacing[4],
   },
   greeting: {
-    color: colors.textMuted,
+    ...bodyFont('regular'),
+    fontSize: 13,
+    color: withOpacity(colors.surface, 0.85),
   },
   name: {
-    ...typography.stepHeadline,
+    ...bodyFont('bold'),
+    // The loudest thing on the screen, per the design.
     fontSize: 20,
-    color: colors.textPrimary,
-    marginTop: 4,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    gap: spacing[8],
+    color: colors.surface,
+    marginTop: 1,
   },
   circleButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: withOpacity(colors.deepSoil, 0.15),
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  cartBadge: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: colors.terracotta,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  cartBadgeText: {
-    ...typography.caption,
-    fontSize: 10,
-    color: colors.surface,
   },
   locationPill: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: spacing[8],
-    marginTop: 10,
-    height: 36,
+    marginTop: spacing[12],
+    height: 32,
     paddingHorizontal: spacing[12],
-    borderRadius: 18,
-    backgroundColor: withOpacity(colors.harvestGreen, 0.12),
+    borderRadius: 16,
+    // Semi-transparent white over the green, not a solid fill.
+    backgroundColor: withOpacity(colors.surface, 0.18),
   },
   locationText: {
-    ...typography.label,
-    color: colors.harvestGreen,
-    maxWidth: 220,
+    ...bodyFont('semibold'),
+    fontSize: 13,
+    color: colors.surface,
+    maxWidth: 200,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[12],
-    // Measured off the mockup — noticeably shorter than the standard
-    // geometry.textInput.height (70) used for form fields elsewhere; this
-    // is a compact, search-specific bar, not a text-entry field.
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: withOpacity(colors.deepSoil, 0.12),
+    height: 44,
+    borderRadius: 22,
     paddingHorizontal: spacing[16],
     backgroundColor: colors.surface,
     marginTop: spacing[16],
   },
   searchPlaceholder: {
-    ...typography.body,
+    ...bodyFont('regular'),
+    fontSize: 15,
     color: colors.textMuted,
   },
   banner: {
@@ -350,17 +383,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing[12],
     marginTop: spacing[16],
-    padding: spacing[16],
-    borderRadius: 18,
-    backgroundColor: withOpacity(colors.terracotta, 0.14),
-    borderWidth: 0.5,
-    borderColor: colors.terracotta,
+    paddingHorizontal: spacing[12],
+    paddingVertical: spacing[12],
+    borderRadius: 14,
+    backgroundColor: colors.deepSoil,
   },
   bannerIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.terracotta,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: withOpacity(colors.surface, 0.35),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -368,49 +401,67 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   bannerTitle: {
-    color: colors.textPrimary,
+    ...bodyFont('bold'),
+    fontSize: 13,
+    color: colors.surface,
   },
   bannerSubtitle: {
-    color: colors.textMuted,
+    ...bodyFont('regular'),
+    fontSize: 10,
+    lineHeight: 13,
+    color: withOpacity(colors.surface, 0.6),
     marginTop: 2,
   },
-  section: {
-    marginTop: spacing[20],
+
+  // ---- Body ----
+  body: {
+    // Deliberately tight — the header block and the first section are meant
+    // to read as one dense unit, not two separated ones.
+    paddingTop: 5,
+  },
+  sectionHeaderWrap: {
+    paddingHorizontal: geometry.screenPaddingButtons,
   },
   farmersRow: {
-    marginHorizontal: -geometry.screenPaddingButtons,
     paddingHorizontal: geometry.screenPaddingButtons,
+    gap: 15,
+    paddingBottom: spacing[4],
   },
   chipsRow: {
-    marginTop: spacing[16],
-    marginHorizontal: -geometry.screenPaddingButtons,
     paddingHorizontal: geometry.screenPaddingButtons,
+    gap: spacing[8],
+    paddingTop: spacing[12],
+    paddingBottom: spacing[4],
   },
   chip: {
-    height: 36,
+    height: 32,
     paddingHorizontal: spacing[16],
-    borderRadius: 18,
+    borderRadius: 16,
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: withOpacity(colors.deepSoil, 0.12),
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing[8],
   },
   chipSelected: {
     backgroundColor: colors.harvestGreen,
+    borderColor: colors.harvestGreen,
   },
   chipLabel: {
-    ...typography.label,
+    ...bodyFont('medium'),
+    fontSize: 12,
     color: colors.textPrimary,
   },
   chipLabelSelected: {
     color: colors.surface,
   },
   productGrid: {
-    gap: spacing[12],
+    paddingHorizontal: geometry.screenPaddingButtons,
+    gap: spacing[8],
   },
   productRow: {
     flexDirection: 'row',
-    gap: spacing[12],
+    gap: 11,
   },
   productSpacer: {
     flex: 1,

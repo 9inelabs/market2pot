@@ -18,7 +18,11 @@ export function useFreshProducts(options?: { category?: string | null; farmerId?
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    // NOT set on refetch — see useAutoRefresh. This hook is polled every 20s;
+    // flipping loading back to true made every consumer unmount its list and
+    // remount it, which is the visible blink/flash the screens had. loading
+    // now means "first load hasn't finished", nothing else, so a background
+    // refresh swaps the data underneath without the UI ever going empty.
     setError(null);
 
     let query = supabase
@@ -49,32 +53,4 @@ export function useFreshProducts(options?: { category?: string | null; farmerId?
   }, [load]);
 
   return { products, loading, error, refresh: load };
-}
-
-// Distinct categories among currently-available products, for the
-// category-chip row. Fetched separately (not derived from useFreshProducts'
-// own limited/filtered result) so the chip list doesn't shrink to whatever
-// happens to be in the current feed.
-export function useProductCategories() {
-  const [categories, setCategories] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    supabase
-      .from('products')
-      .select('category')
-      .eq('is_available', true)
-      .then(({ data }) => {
-        if (cancelled) return;
-        const unique = Array.from(new Set((data ?? []).map((row) => row.category)));
-        setCategories(unique);
-        setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return { categories, loading };
 }

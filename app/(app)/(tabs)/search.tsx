@@ -7,7 +7,8 @@ import { EmptyState } from '@/components/app/EmptyState';
 import { ProductGrid } from '@/components/app/ProductGrid';
 import { ProductQuickViewModal } from '@/components/app/ProductQuickViewModal';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
-import { useFreshProducts, useProductCategories } from '@/hooks/useFreshProducts';
+import { useCategories } from '@/hooks/useCategories';
+import { useFreshProducts } from '@/hooks/useFreshProducts';
 import { useProductQuickView } from '@/hooks/useProductQuickView';
 import { useProductSearch } from '@/hooks/useProductSearch';
 import { strings } from '@/i18n/strings';
@@ -28,7 +29,8 @@ export default function ProductsScreen() {
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  const { categories } = useProductCategories();
+  const { categories: categoryRows } = useCategories();
+  const categories = categoryRows.map((row) => row.name);
   const { products: browseProducts, loading: browseLoading, refresh } = useFreshProducts({
     category: selectedCategory,
     limit: 60,

@@ -6,14 +6,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { EmptyState } from '@/components/app/EmptyState';
 import { ProductGrid } from '@/components/app/ProductGrid';
 import { ProductQuickViewModal } from '@/components/app/ProductQuickViewModal';
-import { useFreshProducts, useProductCategories } from '@/hooks/useFreshProducts';
+import { useCategories } from '@/hooks/useCategories';
+import { useFreshProducts } from '@/hooks/useFreshProducts';
 import { useProductQuickView } from '@/hooks/useProductQuickView';
 import { strings } from '@/i18n/strings';
 import { colors, geometry, spacing } from '@/theme/tokens';
 import { typography } from '@/theme/typography';
 
 export default function CategoriesScreen() {
-  const { categories, loading: categoriesLoading } = useProductCategories();
+  const { categories: categoryRows, loading: categoriesLoading } = useCategories();
+  const categories = categoryRows.map((row) => row.name);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const { products, loading: productsLoading } = useFreshProducts({ category: selectedCategory, limit: 60 });
   const { cart, selectedProduct, open, close, viewFull } = useProductQuickView();
